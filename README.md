@@ -1,1 +1,3 @@
 # postpage
+
+- [Architecture](ARCHITECTURE.md)

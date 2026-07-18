@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Postpage — pipe HTML, get a URL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0e1116;
+  --panel:#151a21;
+  --line:#242c37;
+  --text:#d8dde4;
+  --muted:#8b94a1;
+  --amber:#f2a33c;
+  --amber-dim:#b97a24;
+  --ok:#7bc98a;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans:"IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--ink);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+/* nav */
+nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0;border-bottom:1px solid var(--line)}
+.logo{font-family:var(--mono);font-weight:600;font-size:17px;letter-spacing:.02em;text-decoration:none}
+.logo .dot{color:var(--amber)}
+.nav-links{display:flex;gap:28px;align-items:center;font-size:14px}
+.nav-links a{text-decoration:none;color:var(--muted);transition:color .15s}
+.nav-links a:hover,.nav-links a:focus-visible{color:var(--text)}
+.btn{display:inline-block;font-family:var(--mono);font-size:14px;font-weight:500;padding:10px 18px;border-radius:6px;text-decoration:none;transition:transform .12s ease,background .15s}
+.btn:active{transform:translateY(1px)}
+.btn-amber{background:var(--amber);color:#1a1204}
+.btn-amber:hover{background:#ffb44f}
+.btn-ghost{border:1px solid var(--line);color:var(--text)}
+.btn-ghost:hover{border-color:var(--muted)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:4px}
+
+/* hero */
+.hero{display:grid;grid-template-columns:1fr 1.1fr;gap:56px;align-items:center;padding:88px 0 72px}
+.kicker{font-family:var(--mono);font-size:13px;color:var(--amber);letter-spacing:.08em;text-transform:uppercase;margin-bottom:18px}
+h1{font-size:clamp(34px,4.6vw,52px);line-height:1.12;font-weight:700;letter-spacing:-.02em;margin-bottom:20px}
+h1 em{font-style:normal;color:var(--amber)}
+.lede{color:var(--muted);font-size:18px;max-width:44ch;margin-bottom:32px}
+.hero-ctas{display:flex;gap:14px;flex-wrap:wrap}
+.hero-note{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:22px}
+
+/* terminal */
+.term{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 24px 60px rgba(0,0,0,.45);overflow:hidden}
+.term-bar{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.term-bar span{width:11px;height:11px;border-radius:50%;background:#2c3542}
+.term-bar .t{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.term-body{font-family:var(--mono);font-size:14px;line-height:1.85;padding:20px 22px;min-height:216px;white-space:pre-wrap;word-break:break-all}
+.term-body .p{color:var(--muted)}
+.term-body .ok{color:var(--ok)}
+.term-body .url{color:var(--amber);text-decoration:underline;text-underline-offset:3px}
+.cursor{display:inline-block;width:8px;height:17px;background:var(--amber);vertical-align:-3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* sections */
+section{padding:76px 0;border-top:1px solid var(--line)}
+.sec-label{font-family:var(--mono);font-size:13px;color:var(--amber);letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px}
+h2{font-size:clamp(26px,3vw,34px);font-weight:700;letter-spacing:-.015em;margin-bottom:14px}
+.sec-lede{color:var(--muted);max-width:60ch;margin-bottom:44px}
+
+/* how it works */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:26px 24px}
+.step .cmd{font-family:var(--mono);font-size:13.5px;color:var(--amber);margin-bottom:14px;display:block}
+.step h3{font-size:17px;font-weight:600;margin-bottom:8px}
+.step p{color:var(--muted);font-size:14.5px}
+
+/* isolation */
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.feat{background:var(--ink);padding:28px 26px}
+.feat h3{font-size:16px;font-weight:600;margin-bottom:8px;display:flex;gap:10px;align-items:baseline}
+.feat h3::before{content:"▸";color:var(--amber);font-size:13px}
+.feat p{color:var(--muted);font-size:14.5px}
+
+/* sharing */
+.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.mode{border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.mode-head{padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.mode-head .name{font-family:var(--mono);font-size:14px;color:var(--amber)}
+.mode-head p{color:var(--muted);font-size:13.5px;margin-top:6px}
+.mode pre{font-family:var(--mono);font-size:12.5px;line-height:1.7;color:var(--text);padding:18px 20px;background:var(--panel);flex:1;overflow-x:auto}
+.mode pre .k{color:var(--muted)}
+.mode pre .s{color:var(--ok)}
+
+/* honesty */
+.nots{columns:2;column-gap:48px;max-width:820px}
+.nots li{list-style:none;font-family:var(--mono);font-size:13.5px;color:var(--muted);padding:9px 0;border-bottom:1px solid var(--line);break-inside:avoid}
+.nots li::before{content:"×  ";color:var(--amber-dim)}
+
+/* cta */
+.cta{text-align:center;padding:96px 0}
+.cta h2{margin-bottom:12px}
+.cta p{color:var(--muted);margin-bottom:30px}
+footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
+@media (max-width:880px){
+  .hero{grid-template-columns:1fr;gap:40px;padding-top:56px}
+  .steps,.modes{grid-template-columns:1fr}
+  .feat-grid{grid-template-columns:1fr}
+  .nots{columns:1}
+  .nav-links a:not(.btn){display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .cursor{animation:none}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<nav>
+  <a class="logo" href="#">postpage<span class="dot">.</span>ai</a>
+  <div class="nav-links">
+    <a href="#how">How it works</a>
+    <a href="#isolation">Isolation</a>
+    <a href="#sharing">Sharing</a>
+    <a class="btn btn-ghost" href="#cta">Request access</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div>
+    <p class="kicker">Static hosting for coding agents</p>
+    <h1>Pipe HTML in.<br>Get a <em>URL</em> back.</h1>
+    <p class="lede">Postpage turns a single self-contained HTML document into an isolated, access-controlled web page. Built for agents that generate reports, docs, and analysis — and the people they work for.</p>
+    <div class="hero-ctas">
+      <a class="btn btn-amber" href="#cta">Request access</a>
+      <a class="btn btn-ghost" href="#how">See the CLI</a>
+    </div>
+    <p class="hero-note">$ npm i -g postpage &nbsp;·&nbsp; private by default &nbsp;·&nbsp; up to 10 MiB per page</p>
+  </div>
+
+  <div class="term" aria-label="Terminal demo">
+    <div class="term-bar"><span></span><span></span><span></span><div class="t">zsh — postpage</div></div>
+    <div class="term-body" id="term"><span class="p">$ </span></div>
+  </div>
+</header>
+</div>
+
+<div class="wrap">
+<section id="how">
+  <p class="sec-label">How it works</p>
+  <h2>Three commands, no dashboard.</h2>
+  <p class="sec-lede">The CLI is the whole interface. Every command speaks JSON with <code style="font-family:var(--mono);font-size:14px">--json</code>, so agents and scripts get exactly what humans get.</p>
+  <div class="steps">
+    <div class="step">
+      <span class="cmd">$ postpage publish page.html</span>
+      <h3>Publish</h3>
+      <p>Send raw HTML from a file or a pipe. You get back a stable UUID and a friendly hostname like <code style="font-family:var(--mono)">amber-otter-k7</code>. New pages are private.</p>
+    </div>
+    <div class="step">
+      <span class="cmd">$ postpage update &lt;uuid&gt;</span>
+      <h3>Update</h3>
+      <p>Every update writes a new immutable revision. The URL never changes; the cache key does. Old bytes are never rewritten in place.</p>
+    </div>
+    <div class="step">
+      <span class="cmd">$ postpage sharing &lt;uuid&gt; public</span>
+      <h3>Share</h3>
+      <p>Flip a page between private, public, or a list of specific emails. Permission changes take effect on the very next request.</p>
+    </div>
+  </div>
+</section>
+
+<section id="isolation">
+  <p class="sec-label">Isolation</p>
+  <h2>Every page is its own origin.</h2>
+  <p class="sec-lede">Uploaded HTML is untrusted and may run arbitrary inline JavaScript. Postpage treats that as the default case, not the edge case.</p>
+  <div class="feat-grid">
+    <div class="feat"><h3>One subdomain per page</h3><p>Each page lives at its own hostname, so the browser's same-origin policy walls every page off from every other page — even for a visitor authorized to see both.</p></div>
+    <div class="feat"><h3>Bytes served unchanged</h3><p>No injected scripts, no rewriting, no "powered by" banner. What you upload is exactly what visitors receive, byte for byte.</p></div>
+    <div class="feat"><h3>Network-sealed by CSP</h3><p>Inline script, style, and data: assets run freely. External fetches, sockets, beacons, and form posts are blocked at the browser.</p></div>
+    <div class="feat"><h3>Auth enforced at the edge</h3><p>Every request passes through the Worker. HTML bytes are cached; authorization decisions never are. The storage bucket is private.</p></div>
+  </div>
+</section>
+
+<section id="sharing">
+  <p class="sec-label">Sharing</p>
+  <h2>Three modes. One URL, forever.</h2>
+  <p class="sec-lede">The UUID is stable identity, not a rotating token. Changing who can see a page never changes its address.</p>
+  <div class="modes">
+    <div class="mode">
+      <div class="mode-head"><span class="name">private</span><p>Only you. The default for every new page.</p></div>
+      <pre>{
+  <span class="k">"sharing_mode"</span>: <span class="s">"private"</span>
+}</pre>
+    </div>
+    <div class="mode">
+      <div class="mode-head"><span class="name">public</span><p>Anyone with the full URL. Never listed, never indexed.</p></div>
+      <pre>{
+  <span class="k">"sharing_mode"</span>: <span class="s">"public"</span>
+}</pre>
+    </div>
+    <div class="mode">
+      <div class="mode-head"><span class="name">specific_users</span><p>Verified emails, checked on every request.</p></div>
+      <pre>{
+  <span class="k">"sharing_mode"</span>: <span class="s">"specific_users"</span>,
+  <span class="k">"emails"</span>: [<span class="s">"alex@example.com"</span>]
+}</pre>
+    </div>
+  </div>
+</section>
+
+<section>
+  <p class="sec-label">Honest scope</p>
+  <h2>Things Postpage doesn't do.</h2>
+  <p class="sec-lede">The product is small on purpose. If it's not on the list of goals, it's not hiding in the fine print either.</p>
+  <ul class="nots">
+    <li>No injected scripts or page controls</li>
+    <li>No analytics on your visitors</li>
+    <li>No search-engine indexing</li>
+    <li>No public directory of pages</li>
+    <li>No multi-file sites or asset folders</li>
+    <li>No outbound API calls from hosted pages</li>
+    <li>No sanitising or rewriting your HTML</li>
+    <li>No dashboard to maintain</li>
+  </ul>
+</section>
+
+<section class="cta" id="cta">
+  <h2>Invite-only while we harden the edges.</h2>
+  <p>Postpage is in a private release. Tell us what your agents are shipping.</p>
+  <a class="btn btn-amber" href="mailto:hello@postpage.ai">Request access</a>
+</section>
+
+<footer>
+  <span>postpage.ai — publish once, isolate always</span>
+  <span>© 2026 Postpage</span>
+</footer>
+</div>
+
+<script>
+(function(){
+  var el = document.getElementById('term');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var lines = [
+    {t:'cmd',  text:'generate-report | postpage publish'},
+    {t:'ok',   text:'✓ published amber-otter-k7 (rev 00000001, 48.2 KiB)'},
+    {t:'url',  text:'https://amber-otter-k7.pages.postpage.ai/s/9f2c1a7e-…'},
+    {t:'cmd',  text:'postpage sharing 9f2c1a7e public'},
+    {t:'ok',   text:'✓ sharing_mode: public — effective on next request'}
+  ];
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+  function render(done, partial){
+    var html='';
+    for(var i=0;i<done;i++){
+      var L=lines[i];
+      html += L.t==='cmd' ? '<span class="p">$ </span>'+esc(L.text)+'\n'
+            : L.t==='ok'  ? '<span class="ok">'+esc(L.text)+'</span>\n'
+            : '<span class="url">'+esc(L.text)+'</span>\n';
+    }
+    if(partial!==undefined){
+      var L=lines[done];
+      html += (L.t==='cmd'?'<span class="p">$ </span>':'') + esc(L.text.slice(0,partial));
+    }
+    html += '<span class="cursor" aria-hidden="true"></span>';
+    el.innerHTML = html;
+  }
+  if(reduce){ render(lines.length); return; }
+  var line=0, ch=0;
+  function tick(){
+    if(line>=lines.length){ render(lines.length); return; }
+    var L=lines[line];
+    if(L.t==='cmd'){
+      ch++;
+      render(line, ch);
+      if(ch>=L.text.length){ line++; ch=0; setTimeout(tick, 420); }
+      else setTimeout(tick, 26+Math.random()*40);
+    } else {
+      render(line+1);
+      line++; setTimeout(tick, 340);
+    }
+  }
+  setTimeout(tick, 700);
+})();
+</script>
+</body>
+</html>
