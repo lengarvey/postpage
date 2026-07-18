@@ -42,6 +42,12 @@ export const problems = {
       title: "Access denied",
       detail,
     }),
+  notFound: (c: Context) =>
+    problem(c, {
+      status: 404,
+      code: "not_found",
+      title: "Resource not found",
+    }),
   pageNotFound: (c: Context) =>
     problem(c, {
       status: 404,

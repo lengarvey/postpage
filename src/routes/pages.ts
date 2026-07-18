@@ -4,16 +4,17 @@ import type { Env } from "../env";
 import { problems } from "../lib/problems";
 import { negotiatePageRepresentation } from "../lib/negotiate";
 import {
+  HTML_CONTENT_TYPE,
   MAX_PAGE_BYTES,
   activateRevision,
   canView,
   createPage,
   deletePage,
-  getCurrentHtml,
   getPage,
   getSharedEmails,
   getSharedEmailsForPages,
   listPages,
+  r2Key,
   replaceSharing,
   reserveRevision,
   toPageResource,
@@ -21,6 +22,7 @@ import {
   type PageRow,
   type SharingMode,
 } from "../lib/pages";
+import { getCurrentHtml } from "../lib/serving";
 import { decodeCursor, encodeCursor } from "../lib/cursor";
 import { requireAuth, type AuthVariables } from "../middleware/auth";
 
@@ -48,14 +50,52 @@ async function readHtmlUpload(
     return problems.pageTooLarge(c, MAX_PAGE_BYTES);
   }
 
-  const body = await c.req.arrayBuffer();
-  if (body.byteLength > MAX_PAGE_BYTES) {
-    return problems.pageTooLarge(c, MAX_PAGE_BYTES);
+  // Stream with a hard cap so a chunked upload without Content-Length cannot
+  // buffer arbitrarily much memory before being rejected.
+  const stream = c.req.raw.body;
+  if (stream === null) return problems.emptyBody(c);
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_PAGE_BYTES) {
+      await reader.cancel();
+      return problems.pageTooLarge(c, MAX_PAGE_BYTES);
+    }
+    chunks.push(value);
   }
-  if (body.byteLength === 0) {
+  if (total === 0) {
     return problems.emptyBody(c);
   }
-  return body;
+
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body.buffer;
+}
+
+/**
+ * Re-read a page after a mutation and serialize it. `knownEmails` skips the
+ * permissions query when the caller already holds the current email list.
+ */
+async function updatedPageResponse(
+  c: Context<ApiContext>,
+  uuid: string,
+  knownEmails?: string[],
+): Promise<Response> {
+  const updated = await getPage(c.env.DB, uuid);
+  if (updated === null) return problems.pageNotFound(c);
+  const emails =
+    updated.sharing_mode !== "specific_users"
+      ? []
+      : (knownEmails ?? (await getSharedEmails(c.env.DB, uuid)));
+  return c.json(toPageResource(c.env, updated, emails));
 }
 
 export const pagesApi = new Hono<ApiContext>();
@@ -156,18 +196,22 @@ pagesApi.put("/:uuid", async (c) => {
   if (upload instanceof Response) return upload;
 
   const revision = await reserveRevision(c.env.DB, page.uuid);
-  await activateRevision(
-    c.env,
-    page.uuid,
-    revision,
-    upload,
-    new Date().toISOString(),
-  );
+  try {
+    await activateRevision(
+      c.env,
+      page.uuid,
+      revision,
+      upload,
+      new Date().toISOString(),
+    );
+  } catch (error) {
+    // The current revision is unchanged; clean up the uploaded object so a
+    // failed activation does not orphan it. The reserved number stays unused.
+    await c.env.PAGES_BUCKET.delete(r2Key(page.uuid, revision)).catch(() => {});
+    throw error;
+  }
 
-  const updated = await getPage(c.env.DB, page.uuid);
-  if (updated === null) return problems.pageNotFound(c);
-  const sharedEmails = await getSharedEmails(c.env.DB, page.uuid);
-  return c.json(toPageResource(c.env, updated, sharedEmails));
+  return updatedPageResponse(c, page.uuid);
 });
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -222,17 +266,15 @@ pagesApi.put("/:uuid/sharing", async (c) => {
     );
   }
 
-  await replaceSharing(
-    c.env.DB,
-    page.uuid,
-    mode as SharingMode,
-    mode === "specific_users" ? (emails as string[]) : [],
-  );
+  // The stored form is lowercased, deduplicated, and sorted; compute it once
+  // for both the write and the response.
+  const normalizedEmails =
+    mode === "specific_users"
+      ? [...new Set((emails as string[]).map((e) => e.toLowerCase()))].sort()
+      : [];
+  await replaceSharing(c.env.DB, page.uuid, mode as SharingMode, normalizedEmails);
 
-  const updated = await getPage(c.env.DB, page.uuid);
-  if (updated === null) return problems.pageNotFound(c);
-  const sharedEmails = await getSharedEmails(c.env.DB, page.uuid);
-  return c.json(toPageResource(c.env, updated, sharedEmails));
+  return updatedPageResponse(c, page.uuid, normalizedEmails);
 });
 
 pagesApi.delete("/:uuid", async (c) => {
@@ -256,18 +298,25 @@ pagesApi.get("/:uuid", async (c) => {
   if (page === null) return problems.pageNotFound(c);
 
   const identity = c.get("identity");
-  const sharedEmails = await getSharedEmails(c.env.DB, page.uuid);
+  const sharedEmails =
+    page.sharing_mode === "specific_users"
+      ? await getSharedEmails(c.env.DB, page.uuid)
+      : [];
   if (!canView(page, sharedEmails, identity)) {
     return problems.forbidden(c);
   }
 
-  const html = await getCurrentHtml(c.env, page);
+  const html = await getCurrentHtml(c.env.PAGES_BUCKET, page);
   if (html === null) return problems.pageNotFound(c);
 
   c.header("Vary", "Accept");
   if (representation === "html") {
     return c.body(html, 200, {
-      "Content-Type": "text/html; charset=utf-8",
+      "Content-Type": HTML_CONTENT_TYPE,
+      // The raw-HTML representation is meant for tooling (CLI pull), not for
+      // rendering; keep browsers from sniffing or caching it.
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "no-store",
     });
   }
   return c.json({

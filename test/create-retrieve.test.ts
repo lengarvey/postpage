@@ -102,6 +102,7 @@ describe("GET /v1/pages/{uuid}", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
     expect(res.headers.get("Vary")).toBe("Accept");
+    expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(await res.text()).toBe(HTML);
   });
 

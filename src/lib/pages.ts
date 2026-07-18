@@ -5,6 +5,9 @@ import { generateUniqueHostname } from "./names";
 /** Maximum upload size: 10 MiB. */
 export const MAX_PAGE_BYTES = 10_485_760;
 
+/** Canonical content type for uploaded and served page HTML. */
+export const HTML_CONTENT_TYPE = "text/html; charset=utf-8";
+
 export type SharingMode = "private" | "public" | "specific_users";
 
 export interface PageRow {
@@ -145,7 +148,12 @@ export async function createPage(
   try {
     await activateRevision(env, uuid, 1, html, now);
   } catch (error) {
-    await env.DB.prepare("DELETE FROM pages WHERE uuid = ?").bind(uuid).run();
+    // Best-effort cleanup so neither a content-less page row nor an
+    // orphaned R2 object is left behind.
+    await Promise.allSettled([
+      env.DB.prepare("DELETE FROM pages WHERE uuid = ?").bind(uuid).run(),
+      env.PAGES_BUCKET.delete(r2Key(uuid, 1)),
+    ]);
     throw error;
   }
 
@@ -168,7 +176,7 @@ export async function activateRevision(
 ): Promise<void> {
   const key = r2Key(uuid, revision);
   await env.PAGES_BUCKET.put(key, html, {
-    httpMetadata: { contentType: "text/html; charset=utf-8" },
+    httpMetadata: { contentType: HTML_CONTENT_TYPE },
   });
   await env.DB.batch([
     env.DB.prepare(
@@ -286,7 +294,7 @@ export async function getSharedEmailsForPages(
 
 /**
  * Replace a page's sharing configuration atomically. `emails` must already be
- * validated; they are stored lowercased and deduplicated.
+ * validated, lowercased, and deduplicated.
  */
 export async function replaceSharing(
   db: D1Database,
@@ -297,7 +305,7 @@ export async function replaceSharing(
   const now = new Date().toISOString();
   const statements = [
     db.prepare("DELETE FROM page_permissions WHERE page_uuid = ?").bind(uuid),
-    ...[...new Set(emails.map((e) => e.toLowerCase()))].map((email) =>
+    ...emails.map((email) =>
       db
         .prepare(
           "INSERT INTO page_permissions (page_uuid, email) VALUES (?, ?)",
@@ -316,12 +324,6 @@ export async function replaceSharing(
  * API and page reads fail immediately), then purge every R2 revision object.
  */
 export async function deletePage(env: Env, page: PageRow): Promise<void> {
-  const { results } = await env.DB.prepare(
-    "SELECT r2_key FROM revisions WHERE page_uuid = ?",
-  )
-    .bind(page.uuid)
-    .all<{ r2_key: string }>();
-
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO tombstones (uuid, hostname, owner_id, deleted_at)
@@ -331,20 +333,17 @@ export async function deletePage(env: Env, page: PageRow): Promise<void> {
     env.DB.prepare("DELETE FROM pages WHERE uuid = ?").bind(page.uuid),
   ]);
 
-  if (results.length > 0) {
-    await env.PAGES_BUCKET.delete(results.map((r) => r.r2_key));
-  }
-}
-
-/** Fetch the current HTML bytes for a page, or null when unavailable. */
-export async function getCurrentHtml(
-  env: Env,
-  page: PageRow,
-): Promise<ArrayBuffer | null> {
-  if (page.current_revision === null) return null;
-  const object = await env.PAGES_BUCKET.get(
-    r2Key(page.uuid, page.current_revision),
-  );
-  if (object === null) return null;
-  return object.arrayBuffer();
+  // Purge by prefix rather than from the revisions table so objects written
+  // by a concurrently racing update are removed as well.
+  let cursor: string | undefined;
+  do {
+    const listing = await env.PAGES_BUCKET.list({
+      prefix: `pages/${page.uuid}/`,
+      cursor,
+    });
+    if (listing.objects.length > 0) {
+      await env.PAGES_BUCKET.delete(listing.objects.map((o) => o.key));
+    }
+    cursor = listing.truncated ? listing.cursor : undefined;
+  } while (cursor !== undefined);
 }

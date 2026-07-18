@@ -27,21 +27,31 @@ export interface AuthVariables {
   identity: Identity;
 }
 
+/**
+ * Derive the caller's identity from an Authorization header, or null when
+ * absent/malformed. Single source of truth for the dev-stub token semantics;
+ * both the API middleware and the hosted-page origin use it.
+ */
+export function identityFromBearer(
+  header: string | undefined,
+): Identity | null {
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length).trim();
+  if (token.length === 0) return null;
+  return {
+    userId: token,
+    email: token.includes("@") ? token.toLowerCase() : null,
+  };
+}
+
 export const requireAuth = createMiddleware<{
   Bindings: Env;
   Variables: AuthVariables;
 }>(async (c, next) => {
-  const header = c.req.header("Authorization");
-  if (!header || !header.startsWith("Bearer ")) {
+  const identity = identityFromBearer(c.req.header("Authorization"));
+  if (identity === null) {
     return problems.unauthorized(c, "A bearer token is required.");
   }
-  const token = header.slice("Bearer ".length).trim();
-  if (token.length === 0) {
-    return problems.unauthorized(c, "A bearer token is required.");
-  }
-  c.set("identity", {
-    userId: token,
-    email: token.includes("@") ? token.toLowerCase() : null,
-  });
+  c.set("identity", identity);
   await next();
 });

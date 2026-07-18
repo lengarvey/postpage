@@ -10,11 +10,9 @@ export function negotiatePageRepresentation(
 ): ApiRepresentation | null {
   if (accept === undefined || accept.trim() === "") return "html";
 
-  let best: { rep: ApiRepresentation; q: number; order: number } | null = null;
-  const entries = accept.split(",");
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
-    if (entry === undefined) continue;
+  // Highest q wins; on ties, the first listed supported type wins.
+  let best: { rep: ApiRepresentation; q: number } | null = null;
+  for (const entry of accept.split(",")) {
     const [rawType, ...params] = entry.trim().split(";");
     const type = rawType?.trim().toLowerCase();
     if (!type) continue;
@@ -37,12 +35,8 @@ export function negotiatePageRepresentation(
     }
     if (rep === null) continue;
 
-    if (
-      best === null ||
-      q > best.q ||
-      (q === best.q && rep === "html" && best.rep !== "html" && i < best.order)
-    ) {
-      best = { rep, q, order: i };
+    if (best === null || q > best.q) {
+      best = { rep, q };
     }
   }
   return best?.rep ?? null;

@@ -1,4 +1,4 @@
-import type { SharingMode } from "./pages";
+import { HTML_CONTENT_TYPE, r2Key, type PageRow, type SharingMode } from "./pages";
 
 /**
  * Content Security Policy for hosted pages: allow fully inline/self-contained
@@ -43,7 +43,7 @@ export function pageSecurityHeaders(
   const csp =
     sharingMode === "public" ? PAGE_CSP : `${PAGE_CSP}; frame-ancestors 'none'`;
   return {
-    "Content-Type": "text/html; charset=utf-8",
+    "Content-Type": HTML_CONTENT_TYPE,
     "Content-Security-Policy": csp,
     "Referrer-Policy": "no-referrer",
     "X-Robots-Tag": "noindex, noarchive, nosnippet",
@@ -64,7 +64,6 @@ export async function getRevisionHtml(
   bucket: R2Bucket,
   uuid: string,
   revision: number,
-  r2Key: string,
 ): Promise<ArrayBuffer | null> {
   const cacheKey = new Request(
     `https://revision-cache.postpage.internal/${uuid}/${revision}`,
@@ -78,15 +77,16 @@ export async function getRevisionHtml(
     cache = undefined;
   }
 
-  const object = await bucket.get(r2Key);
+  const object = await bucket.get(r2Key(uuid, revision));
   if (object === null) return null;
   const bytes = await object.arrayBuffer();
 
   if (cache !== undefined) {
     try {
+      // Constructing a Response from the buffer does not consume it.
       await cache.put(
         cacheKey,
-        new Response(bytes.slice(0), {
+        new Response(bytes, {
           headers: { "Cache-Control": "public, max-age=31536000, immutable" },
         }),
       );
@@ -95,4 +95,13 @@ export async function getRevisionHtml(
     }
   }
   return bytes;
+}
+
+/** Fetch the current HTML bytes for a page, or null when unavailable. */
+export async function getCurrentHtml(
+  bucket: R2Bucket,
+  page: PageRow,
+): Promise<ArrayBuffer | null> {
+  if (page.current_revision === null) return null;
+  return getRevisionHtml(bucket, page.uuid, page.current_revision);
 }
