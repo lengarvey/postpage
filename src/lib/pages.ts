@@ -203,6 +203,58 @@ export async function reserveRevision(
   return row.next_revision - 1;
 }
 
+/**
+ * Replace a page's sharing configuration atomically. `emails` must already be
+ * validated; they are stored lowercased and deduplicated.
+ */
+export async function replaceSharing(
+  db: D1Database,
+  uuid: string,
+  mode: SharingMode,
+  emails: string[],
+): Promise<void> {
+  const now = new Date().toISOString();
+  const statements = [
+    db.prepare("DELETE FROM page_permissions WHERE page_uuid = ?").bind(uuid),
+    ...[...new Set(emails.map((e) => e.toLowerCase()))].map((email) =>
+      db
+        .prepare(
+          "INSERT INTO page_permissions (page_uuid, email) VALUES (?, ?)",
+        )
+        .bind(uuid, email),
+    ),
+    db
+      .prepare("UPDATE pages SET sharing_mode = ?, updated_at = ? WHERE uuid = ?")
+      .bind(mode, now, uuid),
+  ];
+  await db.batch(statements);
+}
+
+/**
+ * Delete a page: tombstone it and remove its rows in one atomic batch (all
+ * API and page reads fail immediately), then purge every R2 revision object.
+ */
+export async function deletePage(env: Env, page: PageRow): Promise<void> {
+  const { results } = await env.DB.prepare(
+    "SELECT r2_key FROM revisions WHERE page_uuid = ?",
+  )
+    .bind(page.uuid)
+    .all<{ r2_key: string }>();
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO tombstones (uuid, hostname, owner_id, deleted_at)
+       VALUES (?, ?, ?, ?)`,
+    ).bind(page.uuid, page.hostname, page.owner_id, new Date().toISOString()),
+    // Cascades remove revisions and page_permissions.
+    env.DB.prepare("DELETE FROM pages WHERE uuid = ?").bind(page.uuid),
+  ]);
+
+  if (results.length > 0) {
+    await env.PAGES_BUCKET.delete(results.map((r) => r.r2_key));
+  }
+}
+
 /** Fetch the current HTML bytes for a page, or null when unavailable. */
 export async function getCurrentHtml(
   env: Env,
