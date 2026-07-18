@@ -12,12 +12,16 @@ import {
   getCurrentHtml,
   getPage,
   getSharedEmails,
+  getSharedEmailsForPages,
+  listPages,
   replaceSharing,
   reserveRevision,
   toPageResource,
+  type ListCollection,
   type PageRow,
   type SharingMode,
 } from "../lib/pages";
+import { decodeCursor, encodeCursor } from "../lib/cursor";
 import { requireAuth, type AuthVariables } from "../middleware/auth";
 
 type ApiContext = { Bindings: Env; Variables: AuthVariables };
@@ -65,6 +69,71 @@ pagesApi.post("/", async (c) => {
   const identity = c.get("identity");
   const page = await createPage(c.env, identity.userId, upload);
   return c.json(toPageResource(c.env, page, []), 201);
+});
+
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+const COLLECTIONS: ReadonlySet<string> = new Set([
+  "owned",
+  "shared_with_me",
+  "all",
+]);
+
+pagesApi.get("/", async (c) => {
+  const collection = c.req.query("collection") ?? "owned";
+  if (!COLLECTIONS.has(collection)) {
+    return problems.validationError(
+      c,
+      "collection must be one of: owned, shared_with_me, all.",
+    );
+  }
+
+  let limit = DEFAULT_LIMIT;
+  const rawLimit = c.req.query("limit");
+  if (rawLimit !== undefined) {
+    const parsed = Number.parseInt(rawLimit, 10);
+    if (Number.isNaN(parsed) || String(parsed) !== rawLimit || parsed < 1) {
+      return problems.validationError(c, "limit must be a positive integer.");
+    }
+    limit = Math.min(parsed, MAX_LIMIT);
+  }
+
+  let after;
+  const rawCursor = c.req.query("cursor");
+  if (rawCursor !== undefined) {
+    const decoded = decodeCursor(rawCursor);
+    if (decoded === null) {
+      return problems.validationError(c, "cursor is not valid.");
+    }
+    after = decoded;
+  }
+
+  const identity = c.get("identity");
+  const rows = await listPages(c.env.DB, identity, {
+    collection: collection as ListCollection,
+    limit,
+    after,
+  });
+
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const emailsByPage = await getSharedEmailsForPages(
+    c.env.DB,
+    pageRows
+      .filter((p) => p.sharing_mode === "specific_users")
+      .map((p) => p.uuid),
+  );
+
+  const last = pageRows[pageRows.length - 1];
+  return c.json({
+    pages: pageRows.map((p) =>
+      toPageResource(c.env, p, emailsByPage.get(p.uuid) ?? []),
+    ),
+    next_cursor:
+      hasMore && last !== undefined
+        ? encodeCursor({ updatedAt: last.updated_at, uuid: last.uuid })
+        : null,
+  });
 });
 
 /** Load a page and require the caller to be its owner. */

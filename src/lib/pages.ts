@@ -203,6 +203,87 @@ export async function reserveRevision(
   return row.next_revision - 1;
 }
 
+export type ListCollection = "owned" | "shared_with_me" | "all";
+
+export interface ListOptions {
+  collection: ListCollection;
+  limit: number;
+  after?: { updatedAt: string; uuid: string } | undefined;
+}
+
+/**
+ * List pages visible to an identity in a collection, newest-updated first,
+ * using keyset pagination on (updated_at, uuid) descending. Returns up to
+ * `limit + 1` rows so the caller can detect whether more pages remain.
+ */
+export async function listPages(
+  db: D1Database,
+  identity: Identity,
+  options: ListOptions,
+): Promise<PageRow[]> {
+  const { collection, limit, after } = options;
+
+  const scopes: string[] = [];
+  const binds: unknown[] = [];
+  if (collection === "owned" || collection === "all") {
+    scopes.push("p.owner_id = ?");
+    binds.push(identity.userId);
+  }
+  if (
+    (collection === "shared_with_me" || collection === "all") &&
+    identity.email !== null
+  ) {
+    scopes.push(
+      `(p.sharing_mode = 'specific_users' AND p.owner_id != ? AND EXISTS (
+         SELECT 1 FROM page_permissions pp
+         WHERE pp.page_uuid = p.uuid AND pp.email = ?))`,
+    );
+    binds.push(identity.userId, identity.email);
+  }
+  if (scopes.length === 0) return [];
+
+  let keyset = "";
+  if (after !== undefined) {
+    keyset =
+      "AND (p.updated_at < ? OR (p.updated_at = ? AND p.uuid < ?))";
+    binds.push(after.updatedAt, after.updatedAt, after.uuid);
+  }
+
+  const { results } = await db
+    .prepare(
+      `SELECT p.* FROM pages p
+       WHERE (${scopes.join(" OR ")}) ${keyset}
+       ORDER BY p.updated_at DESC, p.uuid DESC
+       LIMIT ?`,
+    )
+    .bind(...binds, limit + 1)
+    .all<PageRow>();
+  return results;
+}
+
+/** Batch-fetch shared emails for many pages, keyed by page uuid. */
+export async function getSharedEmailsForPages(
+  db: D1Database,
+  uuids: string[],
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (uuids.length === 0) return map;
+  const placeholders = uuids.map(() => "?").join(", ");
+  const { results } = await db
+    .prepare(
+      `SELECT page_uuid, email FROM page_permissions
+       WHERE page_uuid IN (${placeholders}) ORDER BY email`,
+    )
+    .bind(...uuids)
+    .all<{ page_uuid: string; email: string }>();
+  for (const row of results) {
+    const list = map.get(row.page_uuid) ?? [];
+    list.push(row.email);
+    map.set(row.page_uuid, list);
+  }
+  return map;
+}
+
 /**
  * Replace a page's sharing configuration atomically. `emails` must already be
  * validated; they are stored lowercased and deduplicated.
