@@ -23,7 +23,8 @@ for tests/local dev.
 - [x] Browser login flow (AuthKit redirect on the apex origin)
 - [x] Page-host sessions (one-time code handoff, host-only cookie, D1-backed)
 - [x] User records (`users` table, refreshed at login / first API sight)
-- [x] Users are created manually in WorkOS — no signup route.
+- [x] Users are created manually in WorkOS — no signup route. (Superseded:
+      section 3 makes signup self-serve via AuthKit.)
 
 Remaining WorkOS environment configuration (manual, in the WorkOS
 dashboard for each environment):
@@ -71,9 +72,38 @@ See [cli/README.md](cli/README.md).
 
 Remaining CLI follow-ups:
 
-- [ ] Publish the package to npm.
+- [ ] Publish the package to npm (the `postpage` name was unclaimed as of
+      2026-07-19 — grab it).
 
-## 3. Deployment
+## 3. Self-serve launch (product direction decided 2026-07-19)
+
+Agent-first onboarding: an agent must get from "publish this" to a live page
+with the login approval as the only human step. See the revised
+[ARCHITECTURE.md](ARCHITECTURE.md) for the target design.
+
+- [ ] **Flat URLs**: serve pages at `pages.postpage.ai/{uuid}`; drop
+      per-page hostnames, the `/s/` and `/r/` routes, the name generator,
+      and the one-time-code session handoff (one host-only cookie on
+      `pages.postpage.ai` covers everything). Removes the need for the
+      wildcard ACM cert and zone route. Existing pages: none that matter.
+- [ ] **Self-serve signup**: enable AuthKit signup with Magic Auth + GitHub
+      OAuth; disable password auth (WorkOS dashboard config, not code).
+- [ ] **Free-tier quotas and expiry**: 30 pages/day per user; pages deleted
+      after 3 months without a visit. `last_visited_at` written from the
+      serving path only when >1 day stale, via `waitUntil`; the expiry
+      sweep shares the background-deletion machinery below. No API-call
+      rate limits.
+- [ ] **CSP test suite**: with a shared serving origin the hosted-page CSP
+      is the isolation boundary — pin it with tests (absorbs the old
+      "verify CSP across browsers" deployment item).
+- [ ] **Login quickstart**: `postpage login` success prints the three-line
+      publish/share quickstart (the human's onboarding moment; agents get
+      theirs from the skill/MCP).
+- [ ] Later tiers, in ARCHITECTURE.md but not yet scheduled: anonymous
+      publishing (5/day, private only, 1-week TTL — "private" semantics
+      TBD) and paid (100/day, `specific_users`, MCP access, no expiry).
+
+## 4. Deployment
 
 - [x] Create real D1 database + R2 bucket; replace the placeholder
       `database_id` in [wrangler.jsonc](wrangler.jsonc).
@@ -84,11 +114,9 @@ Remaining CLI follow-ups:
       `api.postpage.ai`, `pages.postpage.ai` plus the wildcard zone route,
       all in [wrangler.jsonc](wrangler.jsonc).
 - [x] Apply migrations to the production D1 (`wrangler d1 migrations apply`).
-- [ ] Verify the hosted-page CSP across supported browsers (architecture
-      flags this explicitly).
 - [ ] CI: run `pnpm test` + `pnpm typecheck` on PRs; deploy on main.
 
-## 4. Hardening & operations (deferred in MVP)
+## 5. Hardening & operations (deferred in MVP)
 
 - [ ] **Background deletion**: R2 purge currently runs inline in the DELETE
       request; move to a queue/scheduled cleanup so large pages can't slow or
@@ -105,6 +133,6 @@ Remaining CLI follow-ups:
 
 ## Explicit non-goals (unchanged from the architecture)
 
-Dashboard, injected scripts, public signup, search/discovery, multi-file
-pages, revision browsing/rollback APIs, renaming, custom domains, analytics,
-email invitations, MCP server (later, as a thin adapter over the API).
+Dashboard, injected scripts, search/discovery, multi-file pages, revision
+browsing/rollback APIs, renaming, custom domains, analytics, email
+invitations, MCP server (later, as a thin adapter over the API, paid plan).

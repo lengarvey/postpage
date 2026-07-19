@@ -2,9 +2,9 @@
 
 ## Status
 
-This document records the initial product and architecture decisions for Postpage. It describes the intended MVP rather than a complete implementation specification.
+This document records the product and architecture decisions for Postpage. It describes the intended product rather than a complete implementation specification.
 
-The `postpage.ai` domain is a working assumption and may change.
+Revised 2026-07-19, after the MVP shipped to production: per-page subdomains and the resolver URL are dropped in favour of flat URLs, signup is self-serve, and plans with quotas and expiry are defined. Where the deployed implementation still reflects the earlier design, [TODO.md](TODO.md) tracks the migration.
 
 ## Purpose
 
@@ -16,7 +16,7 @@ Core goals:
 
 - Publishing is trivial from an API or CLI.
 - Uploaded HTML is stored and served byte-for-byte unchanged.
-- Every page is isolated from every other page by the browser's same-origin policy.
+- Pages cannot read each other or reach the network: the Content Security Policy is the isolation boundary.
 - Page access is enforced at the edge.
 - Immutable HTML revisions are inexpensive to store and cache.
 - The initial product has no management dashboard and injects no controls or JavaScript into pages.
@@ -41,53 +41,36 @@ The Worker is the only public route to page content. The R2 bucket is private.
 Each page has:
 
 - A server-generated UUIDv4.
-- A server-generated, human-friendly hostname such as `amber-otter-k7`.
 - One stable canonical URL.
 - One current revision pointer.
 - One sharing configuration.
 
-The friendly hostname is generated once, is globally unique, cannot be selected or renamed by the user in the MVP, and is never reused.
-
 The canonical page URL is:
 
 ```text
-https://amber-otter-k7.pages.postpage.ai/s/{uuid}
+https://pages.postpage.ai/{uuid}
 ```
 
-Only the exact `/s/{uuid}` path serves the page. The hostname without that path and all other paths return `404`. A page that needs client-side navigation can use URL fragments, which do not reach the server:
+Only exact UUID-shaped paths serve pages; reserved non-UUID routes such as `/auth/session` coexist on the same host, and everything else returns `404`. A page that needs client-side navigation can use URL fragments, which do not reach the server:
 
 ```text
-https://amber-otter-k7.pages.postpage.ai/s/{uuid}#/section
+https://pages.postpage.ai/{uuid}#/section
 ```
 
-The same UUID is used in API paths, D1, R2 prefixes, the canonical URL, and the redirect resolver.
+The same UUID is used in API paths, D1, R2 prefixes, and the canonical URL.
 
-### Resolver URL
+The UUID is stable page identity, not a rotating sharing token — changing permissions never changes the URL. Because the path is now the only thing distinguishing pages, the UUID must remain server-generated and unguessable.
 
-The convenient sharing URL is:
+An earlier design gave every page a unique subdomain (`amber-otter-k7.pages.postpage.ai/s/{uuid}`) plus a `/r/{uuid}` resolver. This was dropped (2026-07-19) as operational complexity — wildcard TLS, a name generator, a cookie-handoff dance — that the Content Security Policy below makes unnecessary.
 
-```text
-https://pages.postpage.ai/r/{uuid}
-```
+## Page isolation
 
-It returns a temporary HTTP redirect to the canonical page URL. The resolver must only redirect to a hostname read from Postpage's own page record. It must never accept an arbitrary destination and must never proxy or render uploaded HTML.
+Uploaded HTML is untrusted and may contain arbitrary inline JavaScript, and all pages now share the `pages.postpage.ai` origin. Isolation therefore rests on two boundaries:
 
-The UUID is stable page identity, not a rotating sharing token. Changing permissions does not change either URL.
+- **The hosted-page CSP** (below) sets `connect-src 'none'` and blocks all subresource loading, so one page's scripts cannot fetch another page — even same-origin — and cannot exfiltrate anything they compute. This policy is load-bearing and must be pinned by tests.
+- **The API lives on `api.postpage.ai`**, a different origin. The browser session cookie on `pages.postpage.ai` is never sent to the API, so hosted JavaScript cannot invoke mutating endpoints with a visitor's credentials, and the cookie itself is HTTP-only.
 
-## Origin isolation
-
-Uploaded HTML is untrusted and may contain arbitrary inline JavaScript. Browser origins do not include URL paths, so hosting all pages under `pages.postpage.ai/{uuid}` would allow one page to read another page when a visitor is authorized for both.
-
-Each page therefore receives a unique subdomain:
-
-```text
-amber-otter-k7.pages.postpage.ai
-quiet-orbit-m3.pages.postpage.ai
-```
-
-This makes each page a separate browser origin. One page may embed another, but it cannot read the embedded page's DOM or network response.
-
-No uploaded HTML is ever served from `pages.postpage.ai` itself. That origin contains only trusted Postpage routes such as `/r/{uuid}`.
+No uploaded HTML is ever served from the `postpage.ai` apex, which hosts the homepage and auth flow.
 
 ## Sharing and authorization
 
@@ -133,9 +116,21 @@ Browser behavior:
 - Authorized user: serve the current HTML revision.
 - Authenticated but unauthorized user: return a simple Postpage `403 Access denied` response.
 
-## Authentication
+## Plans, quotas, and expiry
 
-WorkOS AuthKit owns user authentication. There is no public signup route in the MVP; users are created manually through WorkOS.
+Publishing limits and page lifetime are the product's rate limiting; no separate API-call rate limits are planned. The 10 MiB upload cap applies everywhere.
+
+| Plan | Pages per day | Sharing modes | Page lifetime |
+| --- | --- | --- | --- |
+| Anonymous *(future)* | 5 | private only | deleted 1 week after publish |
+| Free (signed in) | 30 | private, public | deleted after 3 months without a visit |
+| Paid *(future)* | 100 | private, public, specific_users | never expires |
+
+Free-tier expiry is activity-based, not fixed: any visit refreshes the clock, so only genuinely abandoned pages die and a shared link keeps working as long as anyone uses it. Tracking this costs almost nothing — the serving path already reads the page row, so the Worker updates `last_visited_at` only when the stored value is more than a day stale, via `waitUntil` so the response never waits on the write. Worst case is one UPDATE per page per day.
+
+Expiry sweeps and quota enforcement share the scheduled-cleanup machinery planned for background deletion. The paid plan also carries MCP access when the MCP server exists. Exact anonymous-publishing semantics (what "private" means without an identity) are deliberately unresolved until that tier is built.
+
+WorkOS AuthKit owns user authentication. Signup is instant and self-serve through AuthKit's hosted UI — Postpage itself has no signup route; AuthKit is the signup surface, and the CLI device-flow login doubles as signup for a brand-new user. Supported methods are Magic Auth (emailed one-time code) and GitHub OAuth; password authentication is disabled. Both methods yield a verified email, which `specific_users` sharing depends on.
 
 The application integration should follow the official WorkOS AuthKit installer:
 
@@ -149,13 +144,11 @@ At a high level, `postpage login` requests device authorization, displays or ope
 
 All API operations require an authenticated bearer credential associated with a WorkOS user. Initial credentials have the full authority of their owner; fine-grained scopes are deferred. The exact WorkOS-supported credential form and lifecycle should be selected during integration rather than implemented as a parallel authentication system in Postpage.
 
-### Page-host sessions
+### Browser sessions
 
-Authentication cookies must not be shared across all page subdomains.
+When a protected page needs authentication, the browser is redirected through the trusted AuthKit flow, which establishes a secure, HTTP-only, host-only session cookie on `pages.postpage.ai`. One login covers every page the visitor is authorized for.
 
-When a protected page needs authentication, the browser is redirected through the trusted AuthKit origin. After authentication, the destination page host receives a short-lived assertion or one-time code and establishes a secure, HTTP-only, host-only session for that exact page hostname.
-
-A credential for `amber-otter-k7.pages.postpage.ai` must never be sent to `quiet-orbit-m3.pages.postpage.ai`. Uploaded JavaScript cannot read the page-host session cookie.
+Uploaded JavaScript cannot read the session cookie (HTTP-only) and cannot ride it anywhere useful: the CSP blocks all outbound requests from hosted pages, and the API is a separate origin. (The earlier per-subdomain design needed a one-time-code handoff to move the session onto each page host; with a single serving host that machinery disappears.)
 
 ## API
 
@@ -207,7 +200,7 @@ GET /v1/pages/{uuid}
 Accept: application/json
 ```
 
-Returns the HTML together with page information such as UUID, friendly hostname, current revision, sharing configuration, URLs, and timestamps.
+Returns the HTML together with page information such as UUID, current revision, sharing configuration, URLs, and timestamps.
 
 Missing `Accept` or `Accept: */*` defaults to `text/html`. Unsupported response types return `406 Not Acceptable`. Responses vary by `Accept`.
 
@@ -246,7 +239,7 @@ DELETE /v1/pages/{uuid}
 Authorization: Bearer ...
 ```
 
-Deletion is irreversible. The page becomes inaccessible immediately. All HTML revisions and permissions are permanently removed. A minimal tombstone retains the UUID, friendly hostname, owner identifier, and deletion timestamp so the hostname is never reassigned.
+Deletion is irreversible. The page becomes inaccessible immediately. All HTML revisions and permissions are permanently removed. A minimal tombstone retains the UUID, owner identifier, and deletion timestamp so the UUID is never reused.
 
 ### Errors
 
@@ -268,6 +261,8 @@ The first-party CLI is the initial human and coding-agent interface over the HTT
 
 ```text
 postpage login
+postpage token
+postpage whoami
 postpage logout
 
 postpage publish [file]
@@ -320,13 +315,13 @@ Cloudflare D1 stores relational metadata only. It does not store page HTML.
 
 The logical data includes:
 
-- Page UUID, friendly hostname, owner, current revision, sharing mode, and timestamps.
+- Page UUID, owner, current revision, sharing mode, and timestamps (including last visit, at day granularity, for expiry).
 - Revision number, R2 key, size, and creation time.
 - Email permissions for specific-user sharing.
 - User-to-WorkOS identity mapping where required.
 - Deletion tombstones.
 
-Exact table definitions, indexes, and migration tooling are implementation details. Page UUIDs and friendly hostnames must be unique.
+Exact table definitions, indexes, and migration tooling are implementation details. Page UUIDs must be unique.
 
 ## Revision and update behavior
 
@@ -348,7 +343,7 @@ Every page request reaches the Worker. Authorization decisions must never be byp
 
 Request flow:
 
-1. Parse and validate the friendly hostname and exact `/s/{uuid}` path.
+1. Validate the exact `/{uuid}` path on the serving host.
 2. Load the page's current metadata and sharing configuration from D1.
 3. Authenticate and authorize the requester when required.
 4. Resolve the current revision.
@@ -437,11 +432,10 @@ The mechanics of asynchronous cleanup are an implementation detail, but deleted 
 
 ## Initial non-goals
 
-The MVP intentionally excludes:
+The product intentionally excludes:
 
 - A management dashboard.
 - Injected page controls or scripts.
-- Public signup.
 - Search, directories, or discoverable publishing.
 - Search-engine indexing.
 - Multiple files or separately hosted assets per page.
@@ -451,7 +445,7 @@ The MVP intentionally excludes:
 - Custom domains.
 - Analytics.
 - Email invitations.
-- An MCP server. The MCP server can be added later as a thin adapter over the HTTP API.
+- An MCP server, for now. It is planned as a thin adapter over the HTTP API, bundled with the paid plan.
 
 ## Deferred implementation decisions
 
@@ -460,11 +454,10 @@ The following should be decided during implementation without changing the produ
 - Worker framework and project layout.
 - Exact D1 schema, indexes, and migrations.
 - Exact WorkOS credential representation and refresh lifecycle.
-- Exact friendly-name word lists and suffix size.
 - API response field names not explicitly fixed above.
 - Cursor encoding.
 - CLI packaging and local credential storage.
-- Rate limits and quotas for the invite-only release.
+- Enforcement mechanics for plan quotas and the expiry sweep.
 - Logging, metrics, alerts, and audit retention.
 - Background deletion mechanism.
 - Test and deployment environments.
