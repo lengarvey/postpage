@@ -76,10 +76,25 @@ export interface PageUrls {
   resolver_url: string;
 }
 
+function pagesBase(env: Env): URL {
+  return new URL(env.PAGES_URL_BASE ?? `https://${env.PAGES_DOMAIN}`);
+}
+
+/** Canonical URL for a page: the friendly host plus the exact /s/{uuid} path. */
+export function canonicalPageUrl(
+  env: Env,
+  hostname: string,
+  uuid: string,
+): string {
+  const base = pagesBase(env);
+  return `${base.protocol}//${hostname}.${base.host}/s/${uuid}`;
+}
+
 export function pageUrls(env: Env, page: PageRow): PageUrls {
+  const base = pagesBase(env);
   return {
-    url: `https://${page.hostname}.${env.PAGES_DOMAIN}/s/${page.uuid}`,
-    resolver_url: `https://${env.PAGES_DOMAIN}/r/${page.uuid}`,
+    url: canonicalPageUrl(env, page.hostname, page.uuid),
+    resolver_url: `${base.protocol}//${base.host}/r/${page.uuid}`,
   };
 }
 

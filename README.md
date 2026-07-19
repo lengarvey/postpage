@@ -35,6 +35,23 @@ identity: `Authorization: Bearer user-1` is user `user-1`; an email-shaped
 token (`Bearer alex@example.com`) also acts as that verified email so
 `specific_users` sharing can be exercised. See `src/middleware/auth.ts`.
 
+### Browsing pages locally
+
+Browsers resolve `*.localhost` to 127.0.0.1, so a `.dev.vars` file (wrangler's
+local-only env overrides, gitignored) makes hosted pages directly openable:
+
+```sh
+cat > .dev.vars <<'EOF'
+PAGES_DOMAIN=pages.localhost
+PAGES_URL_BASE=http://pages.localhost:8787
+EOF
+```
+
+With that, the API stays on `http://localhost:8787`, page URLs returned by the
+API look like `http://{hostname}.pages.localhost:8787/s/{uuid}` and open
+straight in a browser (make the page public first, since browser login is not
+wired up yet), and the resolver lives at `http://pages.localhost:8787/r/{uuid}`.
+
 ### Trying it locally
 
 ```sh
