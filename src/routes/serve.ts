@@ -4,6 +4,7 @@ import type { Env } from "../env";
 import { HOSTNAME_PATTERN } from "../lib/names";
 import {
   canView,
+  canonicalPageUrl,
   getSharedEmails,
   isValidUuid,
   type PageRow,
@@ -87,10 +88,7 @@ export async function resolveRedirect(
     .bind(uuid.toLowerCase())
     .first<{ uuid: string; hostname: string }>();
   if (page === null) return c.text("Not found", 404);
-  return c.redirect(
-    `https://${page.hostname}.${c.env.PAGES_DOMAIN}/s/${page.uuid}`,
-    302,
-  );
+  return c.redirect(canonicalPageUrl(c.env, page.hostname, page.uuid), 302);
 }
 
 /** Trusted apex origin (`PAGES_DOMAIN`): only the resolver lives here. */
