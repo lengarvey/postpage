@@ -6,11 +6,22 @@
   "compatibility_flags": ["nodejs_compat"],
   // Import .html files as strings (used for the landing page).
   "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }],
+  "routes": [
+    // Apex serves the landing page + API; api.* is an alias for the API.
+    { "pattern": "postpage.ai", "custom_domain": true },
+    { "pattern": "api.postpage.ai", "custom_domain": true },
+    // Resolver origin for hosted pages.
+    { "pattern": "pages.postpage.ai", "custom_domain": true },
+    // Hosted-page origins. Custom domains can't be wildcards, so this is a
+    // zone route; it needs a proxied `*.pages` DNS record to receive traffic.
+    { "pattern": "*.pages.postpage.ai/*", "zone_name": "postpage.ai" }
+  ],
+  "observability": { "enabled": true },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "postpage",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "25902203-10a8-460d-9467-698ff8ca7c1b",
       "migrations_dir": "migrations"
     }
   ],

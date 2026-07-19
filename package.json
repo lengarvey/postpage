@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "bin": {
+    "postpage": "./cli/postpage.mjs"
+  },
   "scripts": {
     "dev": "wrangler dev",
     "test": "vitest run",

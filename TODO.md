@@ -28,10 +28,11 @@ for tests/local dev.
 Remaining WorkOS environment configuration (manual, in the WorkOS
 dashboard for each environment):
 
-- [ ] Register the redirect URI: `http://pages.localhost:8787/auth/callback`
+- [x] Register the redirect URI: `http://pages.localhost:8787/auth/callback`
       (local dev) and `https://pages.postpage.ai/auth/callback` (production).
-- [ ] Create users (invite-only; no signup route).
-- [ ] Production secrets: `wrangler secret put WORKOS_API_KEY`,
+- [x] Create users (invite-only; no signup route). Password auth is enabled
+      in production; reset links can be minted via the password_reset API.
+- [x] Production secrets: `wrangler secret put WORKOS_API_KEY`,
       `WORKOS_CLIENT_ID`, and `AUTH_SECRET` (any long random string; signs
       the OAuth `state`). Do **not** set `AUTH_MODE` in production.
 - [ ] Consider raising the AuthKit access-token lifetime for API/CLI
@@ -50,20 +51,24 @@ against the dev auth stub before item 1 lands.
 - [ ] `postpage sharing <uuid> private|public|specific_users --email …`
 - [ ] `postpage delete <uuid>`
 - [ ] `--json` output on all commands for agent/script use.
-- [ ] `postpage login` / `logout` — OAuth 2.0 Device Authorization flow via
-      WorkOS CLI Auth; local credential storage (depends on item 1).
+- [x] `postpage login` / `logout` — OAuth 2.0 Device Authorization flow via
+      WorkOS CLI Auth; local credential storage. Implemented in
+      [cli/postpage.mjs](cli/postpage.mjs) (zero-dep Node script) along with
+      `token` (prints a fresh access token, auto-refreshing) and `whoami`;
+      scripts use `Authorization: Bearer $(postpage token)`.
 - [ ] Packaging decision (npm? single binary?).
 
 ## 3. Deployment
 
-- [ ] Create real D1 database + R2 bucket; replace the placeholder
+- [x] Create real D1 database + R2 bucket; replace the placeholder
       `database_id` in [wrangler.jsonc](wrangler.jsonc).
-- [ ] DNS + wildcard TLS for `*.pages.postpage.ai` (Cloudflare for SaaS /
-      custom hostnames or a wildcard route), apex `pages.postpage.ai`, and an
-      API hostname; confirm the `postpage.ai` domain assumption.
-- [ ] Worker routes for all three host roles (API / apex resolver / page
-      hosts) hitting the single Worker's host-based dispatch.
-- [ ] Apply migrations to the production D1 (`wrangler d1 migrations apply`).
+- [x] DNS + wildcard TLS for `*.pages.postpage.ai`: proxied `*.pages` CNAME
+      + zone route, with an Advanced Certificate (ACM) covering
+      `*.pages.postpage.ai` since Universal SSL stops one level deep.
+- [x] Worker routes for all three host roles: custom domains `postpage.ai`,
+      `api.postpage.ai`, `pages.postpage.ai` plus the wildcard zone route,
+      all in [wrangler.jsonc](wrangler.jsonc).
+- [x] Apply migrations to the production D1 (`wrangler d1 migrations apply`).
 - [ ] Verify the hosted-page CSP across supported browsers (architecture
       flags this explicitly).
 - [ ] CI: run `pnpm test` + `pnpm typecheck` on PRs; deploy on main.
