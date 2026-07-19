@@ -5,7 +5,8 @@
   // rewrites every request's URL/Host to the first route's host, which breaks
   // the host-based dispatch between the API and pages origins. Production
   // config (routes + real name) lives in env.production below; deploy with
-  // `pnpm deploy` (= `wrangler deploy --env production`).
+  // `pnpm deploy:prod` (= `wrangler deploy --env production`; the script is not
+  // named plain "deploy" because pnpm's built-in `pnpm deploy` would shadow it).
   "name": "postpage-dev",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-10",

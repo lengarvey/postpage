@@ -76,7 +76,8 @@ The top-level wrangler.jsonc environment is local development and has no
 routes on purpose: with routes present, `wrangler dev` rewrites every
 request's Host to the first route's host, which would break the host-based
 dispatch between the API and pages origins. Production (routes, the real
-Worker name) is `env.production`; deploy with `pnpm deploy`.
+Worker name) is `env.production`; deploy with `pnpm deploy:prod`
+(named to dodge pnpm's built-in `deploy` command, which shadows scripts).
 
 ### Layout
 
