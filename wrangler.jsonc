@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "postpage",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "postpage",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PAGES_BUCKET",
+      "bucket_name": "postpage-pages"
+    }
+  ],
+  "vars": {
+    // Base domain for hosted pages; friendly hostnames are subdomains of this.
+    "PAGES_DOMAIN": "pages.postpage.ai"
+  }
+}
