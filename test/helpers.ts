@@ -4,9 +4,7 @@ export const API = "http://api.local";
 
 export interface CreatedPage {
   uuid: string;
-  hostname: string;
   url: string;
-  resolver_url: string;
   current_revision: number | null;
   sharing: { sharing_mode: string; emails?: string[] };
   created_at: string;

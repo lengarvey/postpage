@@ -10,11 +10,8 @@
     // Apex serves the landing page + API; api.* is an alias for the API.
     { "pattern": "postpage.ai", "custom_domain": true },
     { "pattern": "api.postpage.ai", "custom_domain": true },
-    // Resolver origin for hosted pages.
-    { "pattern": "pages.postpage.ai", "custom_domain": true },
-    // Hosted-page origins. Custom domains can't be wildcards, so this is a
-    // zone route; it needs a proxied `*.pages` DNS record to receive traffic.
-    { "pattern": "*.pages.postpage.ai/*", "zone_name": "postpage.ai" }
+    // Serving origin: pages at /{uuid} plus the /auth/* login routes.
+    { "pattern": "pages.postpage.ai", "custom_domain": true }
   ],
   "observability": { "enabled": true },
   "d1_databases": [
@@ -32,7 +29,7 @@
     }
   ],
   "vars": {
-    // Base domain for hosted pages; friendly hostnames are subdomains of this.
+    // Host that serves pages at /{uuid} (and the /auth/* login routes).
     "PAGES_DOMAIN": "pages.postpage.ai"
   }
 }

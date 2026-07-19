@@ -1,6 +1,5 @@
 import type { Env } from "../env";
 import type { Identity } from "../middleware/auth";
-import { generateUniqueHostname } from "./names";
 
 /** Maximum upload size: 10 MiB. */
 export const MAX_PAGE_BYTES = 10_485_760;
@@ -12,7 +11,6 @@ export type SharingMode = "private" | "public" | "specific_users";
 
 export interface PageRow {
   uuid: string;
-  hostname: string;
   owner_id: string;
   current_revision: number | null;
   next_revision: number;
@@ -71,32 +69,15 @@ export function canView(
   return false;
 }
 
-export interface PageUrls {
-  url: string;
-  resolver_url: string;
-}
-
 function pagesBase(env: Env): URL {
   // Empty string counts as unset so tests can neutralize .dev.vars overrides.
   return new URL(env.PAGES_URL_BASE || `https://${env.PAGES_DOMAIN}`);
 }
 
-/** Canonical URL for a page: the friendly host plus the exact /s/{uuid} path. */
-export function canonicalPageUrl(
-  env: Env,
-  hostname: string,
-  uuid: string,
-): string {
+/** Canonical URL for a page: the serving origin plus the exact /{uuid} path. */
+export function canonicalPageUrl(env: Env, uuid: string): string {
   const base = pagesBase(env);
-  return `${base.protocol}//${hostname}.${base.host}/s/${uuid}`;
-}
-
-export function pageUrls(env: Env, page: PageRow): PageUrls {
-  const base = pagesBase(env);
-  return {
-    url: canonicalPageUrl(env, page.hostname, page.uuid),
-    resolver_url: `${base.protocol}//${base.host}/r/${page.uuid}`,
-  };
+  return `${base.protocol}//${base.host}/${uuid}`;
 }
 
 export interface SharingConfig {
@@ -114,9 +95,9 @@ export function sharingConfig(
   return { sharing_mode: page.sharing_mode };
 }
 
-export interface PageResource extends PageUrls {
+export interface PageResource {
   uuid: string;
-  hostname: string;
+  url: string;
   current_revision: number | null;
   sharing: SharingConfig;
   created_at: string;
@@ -130,8 +111,7 @@ export function toPageResource(
 ): PageResource {
   return {
     uuid: page.uuid,
-    hostname: page.hostname,
-    ...pageUrls(env, page),
+    url: canonicalPageUrl(env, page.uuid),
     current_revision: page.current_revision,
     sharing: sharingConfig(page, sharedEmails),
     created_at: page.created_at,
@@ -141,9 +121,9 @@ export function toPageResource(
 
 /**
  * Create a page with its first revision. The page row is inserted first,
- * reserving the uuid, hostname, and revision 1; the HTML object is then
- * uploaded to R2 and the revision activated. If the upload fails the page row
- * is removed so no content-less page is left behind.
+ * reserving the uuid and revision 1; the HTML object is then uploaded to R2
+ * and the revision activated. If the upload fails the page row is removed so
+ * no content-less page is left behind.
  */
 export async function createPage(
   env: Env,
@@ -151,14 +131,13 @@ export async function createPage(
   html: ArrayBuffer,
 ): Promise<PageRow> {
   const uuid = crypto.randomUUID();
-  const hostname = await generateUniqueHostname(env.DB);
   const now = new Date().toISOString();
 
   await env.DB.prepare(
-    `INSERT INTO pages (uuid, hostname, owner_id, current_revision, next_revision, sharing_mode, created_at, updated_at)
-     VALUES (?, ?, ?, NULL, 2, 'private', ?, ?)`,
+    `INSERT INTO pages (uuid, owner_id, current_revision, next_revision, sharing_mode, created_at, updated_at)
+     VALUES (?, ?, NULL, 2, 'private', ?, ?)`,
   )
-    .bind(uuid, hostname, ownerId, now, now)
+    .bind(uuid, ownerId, now, now)
     .run();
 
   try {
@@ -342,9 +321,9 @@ export async function replaceSharing(
 export async function deletePage(env: Env, page: PageRow): Promise<void> {
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO tombstones (uuid, hostname, owner_id, deleted_at)
-       VALUES (?, ?, ?, ?)`,
-    ).bind(page.uuid, page.hostname, page.owner_id, new Date().toISOString()),
+      `INSERT INTO tombstones (uuid, owner_id, deleted_at)
+       VALUES (?, ?, ?)`,
+    ).bind(page.uuid, page.owner_id, new Date().toISOString()),
     // Cascades remove revisions and page_permissions.
     env.DB.prepare("DELETE FROM pages WHERE uuid = ?").bind(page.uuid),
   ]);

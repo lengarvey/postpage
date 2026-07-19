@@ -1,44 +1,44 @@
 import { env, SELF } from "cloudflare:test";
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { createPage } from "./helpers";
+import type { Env } from "../src/env";
+import { establishSession } from "../src/routes/auth";
+import { createPage, setSharing } from "./helpers";
 
 const HTML = "<!doctype html><html><body>secret</body></html>";
-const APEX = "https://pages.postpage.ai";
+const ORIGIN = "https://pages.postpage.ai";
 
-function pageUrl(page: { hostname: string; uuid: string }): string {
-  return `https://${page.hostname}.pages.postpage.ai/s/${page.uuid}`;
+function pageUrl(page: { uuid: string }): string {
+  return `${ORIGIN}/${page.uuid}`;
 }
 
-async function seedLoginCode(fields: {
-  code: string;
-  host: string;
-  path: string;
-  userId?: string;
+async function seedSession(fields: {
+  id: string;
+  userId: string;
   email?: string | null;
   expiresAt?: string;
 }): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO login_codes (code, workos_user_id, email, host, redirect_path, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO page_sessions (id, workos_user_id, email, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?)`,
   )
     .bind(
-      fields.code,
-      fields.userId ?? "user_01TEST",
-      fields.email ?? "alex@example.com",
-      fields.host,
-      fields.path,
+      fields.id,
+      fields.userId,
+      fields.email ?? null,
+      new Date().toISOString(),
       fields.expiresAt ?? new Date(Date.now() + 60_000).toISOString(),
     )
     .run();
 }
 
 describe("browser login redirect", () => {
-  it("sends unauthenticated browsers through the apex login", async () => {
+  it("sends unauthenticated browsers through /auth/login on the same origin", async () => {
     const page = await createPage("owner-1", HTML);
     const res = await SELF.fetch(pageUrl(page), { redirect: "manual" });
     expect(res.status).toBe(302);
     const location = new URL(res.headers.get("Location") ?? "");
-    expect(location.origin).toBe(APEX);
+    expect(location.origin).toBe(ORIGIN);
     expect(location.pathname).toBe("/auth/login");
     expect(location.searchParams.get("redirect")).toBe(pageUrl(page));
   });
@@ -53,11 +53,11 @@ describe("browser login redirect", () => {
   });
 });
 
-describe("/auth/login (apex)", () => {
+describe("/auth/login", () => {
   it("redirects to the WorkOS authorization endpoint with signed state", async () => {
     const page = await createPage("owner-1", HTML);
     const res = await SELF.fetch(
-      `${APEX}/auth/login?redirect=${encodeURIComponent(pageUrl(page))}`,
+      `${ORIGIN}/auth/login?redirect=${encodeURIComponent(pageUrl(page))}`,
       { redirect: "manual" },
     );
     expect(res.status).toBe(302);
@@ -66,7 +66,7 @@ describe("/auth/login (apex)", () => {
     expect(location.searchParams.get("client_id")).toBe("client_test_fake");
     expect(location.searchParams.get("provider")).toBe("authkit");
     expect(location.searchParams.get("redirect_uri")).toBe(
-      `${APEX}/auth/callback`,
+      `${ORIGIN}/auth/callback`,
     );
     expect(location.searchParams.get("state")).toMatch(/^[\w-]+\.[\w-]+$/);
   });
@@ -75,18 +75,20 @@ describe("/auth/login (apex)", () => {
     const page = await createPage("owner-1", HTML);
     for (const bad of [
       "",
-      "https://evil.example.com/s/" + page.uuid,
-      // Right domain, wrong path shape.
-      `https://${page.hostname}.pages.postpage.ai/`,
-      `https://${page.hostname}.pages.postpage.ai/s/${page.uuid}/extra`,
-      `https://${page.hostname}.pages.postpage.ai/s/not-a-uuid`,
-      // Apex itself is not a page host.
-      `https://pages.postpage.ai/s/${page.uuid}`,
-      // Nested subdomain smuggling.
-      `https://a.b.pages.postpage.ai/s/${page.uuid}`,
+      `https://evil.example.com/${page.uuid}`,
+      // Right origin, wrong path shape.
+      `${ORIGIN}/`,
+      `${ORIGIN}/${page.uuid}/extra`,
+      `${ORIGIN}/not-a-uuid`,
+      `${ORIGIN}/auth/login`,
+      // Old per-subdomain URL forms.
+      `${ORIGIN}/s/${page.uuid}`,
+      `https://amber-otter-k7.pages.postpage.ai/${page.uuid}`,
+      // The API origin never serves pages.
+      `https://api.postpage.ai/${page.uuid}`,
     ]) {
       const res = await SELF.fetch(
-        `${APEX}/auth/login?redirect=${encodeURIComponent(bad)}`,
+        `${ORIGIN}/auth/login?redirect=${encodeURIComponent(bad)}`,
         { redirect: "manual" },
       );
       expect(res.status, bad).toBe(400);
@@ -94,11 +96,11 @@ describe("/auth/login (apex)", () => {
   });
 });
 
-describe("/auth/callback (apex)", () => {
+describe("/auth/callback", () => {
   it("rejects a missing or tampered state", async () => {
     for (const state of ["", "garbage", "abc.def"]) {
       const res = await SELF.fetch(
-        `${APEX}/auth/callback?code=x&state=${encodeURIComponent(state)}`,
+        `${ORIGIN}/auth/callback?code=x&state=${encodeURIComponent(state)}`,
         { redirect: "manual" },
       );
       expect(res.status, state || "(empty)").toBe(400);
@@ -106,23 +108,20 @@ describe("/auth/callback (apex)", () => {
   });
 });
 
-describe("/auth/session (page host)", () => {
-  it("redeems a one-time code, sets a host-only cookie, and grants access", async () => {
-    const page = await createPage("alex@example.com", HTML);
-    const host = `${page.hostname}.pages.postpage.ai`;
-    const path = `/s/${page.uuid}`;
-    await seedLoginCode({
-      code: "code-1",
-      host,
-      path,
-      userId: "alex@example.com",
+describe("browser sessions", () => {
+  it("establishSession sets a host-only HTTP-only cookie backed by D1", async () => {
+    // The full callback exchanges a code with WorkOS over the network; the
+    // session-establishing half it ends with is exercised directly.
+    const app = new Hono<{ Bindings: Env }>();
+    app.get("/test-establish", async (c) => {
+      await establishSession(c, {
+        userId: "user_01TEST",
+        email: "alex@example.com",
+      });
+      return c.text("ok");
     });
-
-    const res = await SELF.fetch(`https://${host}/auth/session?code=code-1`, {
-      redirect: "manual",
-    });
-    expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe(path);
+    const res = await app.request(`${ORIGIN}/test-establish`, {}, env);
+    expect(res.status).toBe(200);
 
     const cookie = res.headers.get("Set-Cookie") ?? "";
     expect(cookie).toContain("pp_session=");
@@ -130,148 +129,87 @@ describe("/auth/session (page host)", () => {
     expect(cookie).toContain("Secure");
     expect(cookie).toContain("Path=/");
     expect(cookie).toContain("SameSite=Lax");
-    // Host-only: no Domain attribute, so the cookie never crosses subdomains.
+    // Host-only: no Domain attribute, so the cookie stays on this origin.
     expect(cookie).not.toContain("Domain=");
 
-    const sessionCookie = cookie.split(";")[0]!;
-    const view = await SELF.fetch(`https://${host}${path}`, {
-      headers: { Cookie: sessionCookie },
-    });
-    expect(view.status).toBe(200);
-    expect(await view.text()).toBe(HTML);
+    const sessionId = /pp_session=([^;]+)/.exec(cookie)?.[1];
+    const row = await env.DB.prepare(
+      "SELECT workos_user_id, email FROM page_sessions WHERE id = ?",
+    )
+      .bind(sessionId)
+      .first<{ workos_user_id: string; email: string | null }>();
+    expect(row?.workos_user_id).toBe("user_01TEST");
+    expect(row?.email).toBe("alex@example.com");
+  });
 
-    // The session is bound to this exact host: another page rejects it.
-    const other = await createPage("someone-else", HTML);
-    const crossed = await SELF.fetch(
-      `https://${other.hostname}.pages.postpage.ai/s/${other.uuid}`,
-      { headers: { Cookie: sessionCookie }, redirect: "manual" },
-    );
-    expect(crossed.status).toBe(302); // back to login, not served
+  it("one session grants access to every page the user may view", async () => {
+    const one = await createPage("alex@example.com", HTML);
+    const two = await createPage("alex@example.com", HTML);
+    await seedSession({ id: "sess-owner", userId: "alex@example.com" });
+
+    for (const page of [one, two]) {
+      const res = await SELF.fetch(pageUrl(page), {
+        headers: { Cookie: "pp_session=sess-owner" },
+      });
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(HTML);
+    }
   });
 
   it("grants specific_users access by the session's verified email", async () => {
     const page = await createPage("owner-1", HTML);
-    const { setSharing } = await import("./helpers");
     await setSharing("owner-1", page.uuid, {
       sharing_mode: "specific_users",
       emails: ["alex@example.com"],
     });
-    const host = `${page.hostname}.pages.postpage.ai`;
-    const path = `/s/${page.uuid}`;
-    await seedLoginCode({
-      code: "code-email",
-      host,
-      path,
+    await seedSession({
+      id: "sess-email",
       userId: "user_01TEST",
       email: "alex@example.com",
     });
-    const res = await SELF.fetch(
-      `https://${host}/auth/session?code=code-email`,
-      { redirect: "manual" },
-    );
-    const sessionCookie = (res.headers.get("Set-Cookie") ?? "").split(";")[0]!;
-    const view = await SELF.fetch(`https://${host}${path}`, {
-      headers: { Cookie: sessionCookie },
+    const res = await SELF.fetch(pageUrl(page), {
+      headers: { Cookie: "pp_session=sess-email" },
     });
-    expect(view.status).toBe(200);
+    expect(res.status).toBe(200);
   });
 
   it("returns 403 for an authenticated but unauthorized session", async () => {
     const page = await createPage("owner-1", HTML);
-    const host = `${page.hostname}.pages.postpage.ai`;
-    const path = `/s/${page.uuid}`;
-    await seedLoginCode({
-      code: "code-stranger",
-      host,
-      path,
+    await seedSession({
+      id: "sess-stranger",
       userId: "user_stranger",
       email: "stranger@example.com",
     });
-    const res = await SELF.fetch(
-      `https://${host}/auth/session?code=code-stranger`,
-      { redirect: "manual" },
-    );
-    const sessionCookie = (res.headers.get("Set-Cookie") ?? "").split(";")[0]!;
-    const view = await SELF.fetch(`https://${host}${path}`, {
-      headers: { Cookie: sessionCookie },
+    const res = await SELF.fetch(pageUrl(page), {
+      headers: { Cookie: "pp_session=sess-stranger" },
     });
-    expect(view.status).toBe(403);
+    expect(res.status).toBe(403);
   });
 
-  it("rejects reuse, unknown codes, wrong hosts, and expired codes", async () => {
+  it("ignores unknown and expired sessions", async () => {
     const page = await createPage("owner-1", HTML);
-    const host = `${page.hostname}.pages.postpage.ai`;
-    const path = `/s/${page.uuid}`;
 
-    await seedLoginCode({ code: "code-once", host, path });
-    const first = await SELF.fetch(
-      `https://${host}/auth/session?code=code-once`,
-      { redirect: "manual" },
-    );
-    expect(first.status).toBe(302);
-    const reuse = await SELF.fetch(
-      `https://${host}/auth/session?code=code-once`,
-      { redirect: "manual" },
-    );
-    expect(reuse.status).toBe(401);
-
-    expect(
-      (
-        await SELF.fetch(`https://${host}/auth/session?code=nope`, {
-          redirect: "manual",
-        })
-      ).status,
-    ).toBe(401);
-    expect(
-      (
-        await SELF.fetch(`https://${host}/auth/session`, {
-          redirect: "manual",
-        })
-      ).status,
-    ).toBe(401);
-
-    // Minted for a different host: unusable here.
-    await seedLoginCode({
-      code: "code-wrong-host",
-      host: "other-host-x1.pages.postpage.ai",
-      path,
+    const unknown = await SELF.fetch(pageUrl(page), {
+      headers: { Cookie: "pp_session=never-created" },
+      redirect: "manual",
     });
-    expect(
-      (
-        await SELF.fetch(`https://${host}/auth/session?code=code-wrong-host`, {
-          redirect: "manual",
-        })
-      ).status,
-    ).toBe(401);
+    expect(unknown.status).toBe(302); // treated as unauthenticated
 
-    await seedLoginCode({
-      code: "code-expired",
-      host,
-      path,
+    await seedSession({
+      id: "sess-old",
+      userId: "owner-1",
       expiresAt: new Date(Date.now() - 1000).toISOString(),
     });
-    expect(
-      (
-        await SELF.fetch(`https://${host}/auth/session?code=code-expired`, {
-          redirect: "manual",
-        })
-      ).status,
-    ).toBe(401);
-  });
-
-  it("ignores expired sessions", async () => {
-    const page = await createPage("owner-1", HTML);
-    const host = `${page.hostname}.pages.postpage.ai`;
-    await env.DB.prepare(
-      `INSERT INTO page_sessions (id, host, workos_user_id, email, created_at, expires_at)
-       VALUES ('sess-old', ?, 'owner-1', NULL, '2026-01-01', ?)`,
-    )
-      .bind(host, new Date(Date.now() - 1000).toISOString())
-      .run();
-    const res = await SELF.fetch(`https://${host}/s/${page.uuid}`, {
+    const expired = await SELF.fetch(pageUrl(page), {
       headers: { Cookie: "pp_session=sess-old" },
       redirect: "manual",
     });
-    expect(res.status).toBe(302); // treated as unauthenticated
+    expect(expired.status).toBe(302);
+
+    // Expired sessions are removed on sight.
+    const row = await env.DB.prepare(
+      "SELECT id FROM page_sessions WHERE id = 'sess-old'",
+    ).first();
+    expect(row).toBeNull();
   });
 });

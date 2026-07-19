@@ -17,13 +17,7 @@ describe("POST /v1/pages", () => {
     const page = (await res.json()) as Record<string, unknown>;
 
     expect(page.uuid).toMatch(/^[0-9a-f-]{36}$/);
-    expect(page.hostname).toMatch(/^[a-z]+-[a-z]+-[a-z][a-z0-9]$/);
-    expect(page.url).toBe(
-      `https://${page.hostname}.pages.postpage.ai/s/${page.uuid}`,
-    );
-    expect(page.resolver_url).toBe(
-      `https://pages.postpage.ai/r/${page.uuid}`,
-    );
+    expect(page.url).toBe(`https://pages.postpage.ai/${page.uuid}`);
     expect(page.current_revision).toBe(1);
     expect(page.sharing).toEqual({ sharing_mode: "private" });
 
@@ -126,7 +120,7 @@ describe("GET /v1/pages/{uuid}", () => {
     expect(res.headers.get("Content-Type")).toContain("application/json");
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.uuid).toBe(page.uuid);
-    expect(body.hostname).toBe(page.hostname);
+    expect(body.url).toBe(page.url);
     expect(body.html).toBe(HTML);
     expect(body.current_revision).toBe(1);
     expect(body.sharing).toEqual({ sharing_mode: "private" });

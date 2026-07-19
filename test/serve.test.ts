@@ -4,8 +4,8 @@ import { API, authed, createPage, setSharing } from "./helpers";
 
 const HTML = "<!doctype html><html><body><h1>Doc</h1><script>1</script></body></html>";
 
-function pageUrl(page: { hostname: string; uuid: string }): string {
-  return `https://${page.hostname}.pages.postpage.ai/s/${page.uuid}`;
+function pageUrl(page: { uuid: string }): string {
+  return `https://pages.postpage.ai/${page.uuid}`;
 }
 
 describe("hosted page serving", () => {
@@ -17,6 +17,11 @@ describe("hosted page serving", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe(HTML);
     expect(res.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+  });
+
+  it("returns the canonical flat URL from the API", async () => {
+    const page = await createPage("owner-1", HTML);
+    expect(page.url).toBe(pageUrl(page));
   });
 
   it("applies the isolation security headers", async () => {
@@ -94,29 +99,34 @@ describe("hosted page serving", () => {
     expect(await (await SELF.fetch(pageUrl(page))).text()).toBe(v2);
   });
 
-  it("returns 404 for anything but the exact /s/{uuid} path", async () => {
+  it("returns 404 for anything but an exact /{uuid} path", async () => {
     const page = await createPage("owner-1", HTML);
     await setSharing("owner-1", page.uuid, { sharing_mode: "public" });
-    const origin = `https://${page.hostname}.pages.postpage.ai`;
+    const origin = "https://pages.postpage.ai";
 
     for (const path of [
       "/",
       "/index.html",
-      `/s/${page.uuid}/extra`,
-      "/s/not-a-uuid",
-      `/s/${crypto.randomUUID()}`, // valid uuid, wrong hostname
-      "/r/whatever",
+      `/${page.uuid}/extra`,
+      "/not-a-uuid",
+      `/${crypto.randomUUID()}`, // valid uuid shape, no such page
+      `/s/${page.uuid}`, // old per-subdomain path
+      `/r/${page.uuid}`, // old resolver path
+      "/v1/pages", // the API is a different origin
     ]) {
       const res = await SELF.fetch(`${origin}${path}`);
       expect(res.status, path).toBe(404);
     }
   });
 
-  it("returns 404 for an unknown hostname", async () => {
-    const res = await SELF.fetch(
-      `https://never-created-z9.pages.postpage.ai/s/${crypto.randomUUID()}`,
-    );
+  it("never serves page content from the API origin", async () => {
+    const page = await createPage("owner-1", HTML);
+    await setSharing("owner-1", page.uuid, { sharing_mode: "public" });
+    const res = await SELF.fetch(`${API}/${page.uuid}`);
     expect(res.status).toBe(404);
+    expect(res.headers.get("Content-Type")).toContain(
+      "application/problem+json",
+    );
   });
 
   it("returns 404 after deletion", async () => {
@@ -127,58 +137,5 @@ describe("hosted page serving", () => {
       ...authed("owner-1"),
     });
     expect((await SELF.fetch(pageUrl(page))).status).toBe(404);
-  });
-});
-
-describe("resolver", () => {
-  it("redirects to the canonical page URL", async () => {
-    const page = await createPage("owner-1", HTML);
-    const res = await SELF.fetch(
-      `https://pages.postpage.ai/r/${page.uuid}`,
-      { redirect: "manual" },
-    );
-    expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe(pageUrl(page));
-  });
-
-  it("also works on the API origin for local development", async () => {
-    const page = await createPage("owner-1", HTML);
-    const res = await SELF.fetch(`${API}/r/${page.uuid}`, {
-      redirect: "manual",
-    });
-    expect(res.status).toBe(302);
-    expect(res.headers.get("Location")).toBe(pageUrl(page));
-  });
-
-  it("never serves page content from the apex origin", async () => {
-    const page = await createPage("owner-1", HTML);
-    await setSharing("owner-1", page.uuid, { sharing_mode: "public" });
-    for (const path of ["/", `/s/${page.uuid}`, "/v1/pages"]) {
-      const res = await SELF.fetch(`https://pages.postpage.ai${path}`);
-      expect(res.status, path).toBe(404);
-    }
-  });
-
-  it("returns 404 for unknown or invalid uuids and deleted pages", async () => {
-    expect(
-      (await SELF.fetch(`https://pages.postpage.ai/r/${crypto.randomUUID()}`))
-        .status,
-    ).toBe(404);
-    expect(
-      (await SELF.fetch("https://pages.postpage.ai/r/nope")).status,
-    ).toBe(404);
-
-    const page = await createPage("owner-1", HTML);
-    await SELF.fetch(`${API}/v1/pages/${page.uuid}`, {
-      method: "DELETE",
-      ...authed("owner-1"),
-    });
-    expect(
-      (
-        await SELF.fetch(`https://pages.postpage.ai/r/${page.uuid}`, {
-          redirect: "manual",
-        })
-      ).status,
-    ).toBe(404);
   });
 });
