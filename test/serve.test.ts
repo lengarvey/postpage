@@ -52,8 +52,10 @@ describe("hosted page serving", () => {
   it("enforces sharing on every request", async () => {
     const page = await createPage("owner-1", HTML);
 
-    // Private: no session -> 401 (login redirect placeholder), stranger -> 403.
-    expect((await SELF.fetch(pageUrl(page))).status).toBe(401);
+    // Private: no session -> redirect to login, stranger -> 403.
+    expect(
+      (await SELF.fetch(pageUrl(page), { redirect: "manual" })).status,
+    ).toBe(302);
     expect((await SELF.fetch(pageUrl(page), authed("stranger"))).status).toBe(
       403,
     );

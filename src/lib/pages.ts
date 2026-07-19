@@ -77,7 +77,8 @@ export interface PageUrls {
 }
 
 function pagesBase(env: Env): URL {
-  return new URL(env.PAGES_URL_BASE ?? `https://${env.PAGES_DOMAIN}`);
+  // Empty string counts as unset so tests can neutralize .dev.vars overrides.
+  return new URL(env.PAGES_URL_BASE || `https://${env.PAGES_DOMAIN}`);
 }
 
 /** Canonical URL for a page: the friendly host plus the exact /s/{uuid} path. */

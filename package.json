@@ -11,7 +11,9 @@
     "db:migrate:local": "wrangler d1 migrations apply postpage --local"
   },
   "dependencies": {
-    "hono": "^4.12.30"
+    "@workos-inc/node": "^10.8.0",
+    "hono": "^4.12.30",
+    "jose": "^6.2.3"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.21",

@@ -10,7 +10,14 @@ import {
   type PageRow,
 } from "../lib/pages";
 import { getRevisionHtml, pageSecurityHeaders } from "../lib/serving";
-import { identityFromBearer } from "../middleware/auth";
+import { identityFromRequest } from "../middleware/auth";
+import {
+  authCallback,
+  authLogin,
+  authSession,
+  identityFromSession,
+  loginUrl,
+} from "./auth";
 
 /**
  * Hosted-page origin: `{friendly-hostname}.{PAGES_DOMAIN}`. Only the exact
@@ -40,14 +47,22 @@ serveApp.get("/s/:uuid", async (c) => {
   }
 
   if (page.sharing_mode !== "public") {
-    // DEV AUTH STUB — the real flow redirects through WorkOS AuthKit and
-    // establishes a host-only session cookie for this exact page hostname
-    // (see ARCHITECTURE.md "Page-host sessions"). Until then, page visitors
-    // authenticate with the same dev bearer tokens the API accepts.
-    const identity = identityFromBearer(c.req.header("Authorization"));
+    // API clients authenticate with the same bearer credential as the API;
+    // browsers use the host-only session cookie established by /auth/session.
+    const authHeader = c.req.header("Authorization");
+    const identity =
+      (await identityFromRequest(c.env, authHeader)) ??
+      (await identityFromSession(c));
     if (identity === null) {
-      // Placeholder for the WorkOS login redirect + page-host session.
-      return c.text("Authentication required", 401);
+      // A presented-but-invalid bearer token is an API request: keep the 401
+      // contract. Everything else is a browser: send it through AuthKit.
+      if (authHeader !== undefined) {
+        return c.text("Authentication required", 401);
+      }
+      return c.redirect(
+        loginUrl(c.env, canonicalPageUrl(c.env, page.hostname, page.uuid)),
+        302,
+      );
     }
     const sharedEmails =
       page.sharing_mode === "specific_users"
@@ -68,6 +83,11 @@ serveApp.get("/s/:uuid", async (c) => {
 
   return c.body(html, 200, pageSecurityHeaders(page.sharing_mode));
 });
+
+// Page-host sessions: redeems the one-time code minted by the apex callback
+// and sets this hostname's session cookie (ARCHITECTURE.md "Page-host
+// sessions").
+serveApp.get("/auth/session", authSession);
 
 serveApp.notFound((c) => c.text("Not found", 404));
 
@@ -91,7 +111,12 @@ export async function resolveRedirect(
   return c.redirect(canonicalPageUrl(c.env, page.hostname, page.uuid), 302);
 }
 
-/** Trusted apex origin (`PAGES_DOMAIN`): only the resolver lives here. */
+/**
+ * Trusted apex origin (`PAGES_DOMAIN`): the resolver and the AuthKit login
+ * endpoints live here. It never serves uploaded HTML.
+ */
 export const resolverApp = new Hono<{ Bindings: Env }>();
 resolverApp.get("/r/:uuid", resolveRedirect);
+resolverApp.get("/auth/login", authLogin);
+resolverApp.get("/auth/callback", authCallback);
 resolverApp.notFound((c) => c.text("Not found", 404));

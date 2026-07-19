@@ -6,24 +6,36 @@ priority order.
 
 ## 1. Authentication — WorkOS AuthKit
 
-The whole dev stub lives behind one seam: `identityFromBearer` in
-[src/middleware/auth.ts](src/middleware/auth.ts). Everything downstream only
-consumes `Identity { userId, email }`.
+Implemented. `identityFromRequest` in
+[src/middleware/auth.ts](src/middleware/auth.ts) verifies bearer
+credentials as WorkOS AuthKit access tokens (JWTs checked against WorkOS's
+JWKS); everything downstream consumes `Identity { userId, email }`
+unchanged. The browser flow lives in [src/routes/auth.ts](src/routes/auth.ts):
+protected pages redirect to `/auth/login` on the trusted apex, the AuthKit
+callback mints a one-time code for the destination page host, and
+`/auth/session` on that host redeems it into a host-only HTTP-only cookie
+backed by D1. The `users` table (migration 0002) caches the WorkOS-user →
+verified-email mapping. `AUTH_MODE=dev-stub` keeps the old dev bearer stub
+for tests/local dev.
 
-- [ ] **API credentials**: validate bearer credentials against WorkOS and
-      derive `userId` + verified `email` from the WorkOS user. Pick the
-      credential form/lifecycle WorkOS supports rather than building a
-      parallel token system (see architecture "Authentication").
-- [ ] **Browser login flow**: replace the `401 Authentication required`
-      placeholder in [src/routes/serve.ts](src/routes/serve.ts) with a
-      redirect through AuthKit and back to the page.
-- [ ] **Page-host sessions**: after login, hand the destination page host a
-      short-lived assertion/one-time code and set a secure, HTTP-only,
-      host-only session cookie for that exact hostname. Cookies must never be
-      shared across page subdomains (architecture "Page-host sessions").
-- [ ] **User records**: persist the user-to-WorkOS mapping in D1 where
-      needed (schema has no users table yet; add via migration if required).
-- [ ] Users are created manually in WorkOS — no signup route.
+- [x] API credentials (WorkOS access tokens verified via JWKS; no parallel
+      token system — clients obtain/refresh tokens through WorkOS)
+- [x] Browser login flow (AuthKit redirect on the apex origin)
+- [x] Page-host sessions (one-time code handoff, host-only cookie, D1-backed)
+- [x] User records (`users` table, refreshed at login / first API sight)
+- [x] Users are created manually in WorkOS — no signup route.
+
+Remaining WorkOS environment configuration (manual, in the WorkOS
+dashboard for each environment):
+
+- [ ] Register the redirect URI: `http://pages.localhost:8787/auth/callback`
+      (local dev) and `https://pages.postpage.ai/auth/callback` (production).
+- [ ] Create users (invite-only; no signup route).
+- [ ] Production secrets: `wrangler secret put WORKOS_API_KEY`,
+      `WORKOS_CLIENT_ID`, and `AUTH_SECRET` (any long random string; signs
+      the OAuth `state`). Do **not** set `AUTH_MODE` in production.
+- [ ] Consider raising the AuthKit access-token lifetime for API/CLI
+      ergonomics until the CLI's refresh handling lands.
 
 ## 2. CLI
 

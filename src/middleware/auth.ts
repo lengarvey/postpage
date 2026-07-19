@@ -1,22 +1,8 @@
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../env";
 import { problems } from "../lib/problems";
+import { identityFromAccessToken } from "../lib/workos";
 
-/**
- * DEV AUTH STUB — replace with WorkOS AuthKit integration.
- *
- * The real system authenticates bearer credentials against WorkOS and derives
- * the user id and verified email from the WorkOS user. Until that lands, the
- * bearer token itself is treated as the caller's identity:
- *
- *   Authorization: Bearer user-1            -> userId "user-1", no email
- *   Authorization: Bearer alex@example.com  -> userId "alex@example.com",
- *                                              verified email "alex@example.com"
- *
- * An email-shaped token doubles as a verified email so `specific_users`
- * sharing is exercisable end to end. Nothing about routes, storage, or
- * authorization logic depends on this representation beyond `Identity`.
- */
 export interface Identity {
   userId: string;
   /** Verified email address, when the identity has one. */
@@ -28,29 +14,57 @@ export interface AuthVariables {
 }
 
 /**
- * Derive the caller's identity from an Authorization header, or null when
- * absent/malformed. Single source of truth for the dev-stub token semantics;
- * both the API middleware and the hosted-page origin use it.
+ * DEV AUTH STUB — active only when AUTH_MODE=dev-stub (tests, local dev).
+ * The bearer token itself is treated as the caller's identity:
+ *
+ *   Authorization: Bearer user-1            -> userId "user-1", no email
+ *   Authorization: Bearer alex@example.com  -> userId "alex@example.com",
+ *                                              verified email "alex@example.com"
+ *
+ * An email-shaped token doubles as a verified email so `specific_users`
+ * sharing is exercisable end to end.
  */
-export function identityFromBearer(
-  header: string | undefined,
-): Identity | null {
-  if (!header?.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length).trim();
-  if (token.length === 0) return null;
+function devStubIdentity(token: string): Identity {
   return {
     userId: token,
     email: token.includes("@") ? token.toLowerCase() : null,
   };
 }
 
+/** Extract the bearer token from an Authorization header, or null. */
+export function bearerToken(header: string | undefined): string | null {
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice("Bearer ".length).trim();
+  return token.length === 0 ? null : token;
+}
+
+/**
+ * Derive the caller's identity from an Authorization header, or null when
+ * absent/malformed/unverifiable. In the real mode the bearer credential is a
+ * WorkOS AuthKit access token verified against WorkOS's JWKS. Single source
+ * of truth for API identity; both the API middleware and the hosted-page
+ * origin use it.
+ */
+export async function identityFromRequest(
+  env: Env,
+  header: string | undefined,
+): Promise<Identity | null> {
+  const token = bearerToken(header);
+  if (token === null) return null;
+  if (env.AUTH_MODE === "dev-stub") return devStubIdentity(token);
+  return identityFromAccessToken(env, token);
+}
+
 export const requireAuth = createMiddleware<{
   Bindings: Env;
   Variables: AuthVariables;
 }>(async (c, next) => {
-  const identity = identityFromBearer(c.req.header("Authorization"));
+  const identity = await identityFromRequest(
+    c.env,
+    c.req.header("Authorization"),
+  );
   if (identity === null) {
-    return problems.unauthorized(c, "A bearer token is required.");
+    return problems.unauthorized(c, "A valid bearer token is required.");
   }
   c.set("identity", identity);
   await next();

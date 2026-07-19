@@ -11,6 +11,7 @@ export default defineWorkersConfig(async () => {
 
   return {
     test: {
+      include: ["test/**/*.test.ts"],
       setupFiles: ["./test/apply-migrations.ts"],
       poolOptions: {
         workers: {
@@ -19,6 +20,16 @@ export default defineWorkersConfig(async () => {
           miniflare: {
             bindings: {
               TEST_MIGRATIONS: migrations,
+              // Pin the domains: .dev.vars (local dev) must not leak into
+              // tests. Empty PAGES_URL_BASE means "derive from PAGES_DOMAIN".
+              PAGES_DOMAIN: "pages.postpage.ai",
+              PAGES_URL_BASE: "",
+              // API identity uses the dev stub; the browser login flow is
+              // exercised against these fake WorkOS values (no network).
+              AUTH_MODE: "dev-stub",
+              AUTH_SECRET: "test-auth-secret-not-for-production",
+              WORKOS_API_KEY: "sk_test_fake",
+              WORKOS_CLIENT_ID: "client_test_fake",
             },
           },
         },

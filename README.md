@@ -129,12 +129,19 @@ curl -si http://pages.localhost:8787/r/<uuid>
 
 ## Status
 
-The HTTP API and page serving described above are implemented and tested
-(62 tests running against real D1/R2 bindings in workerd). Not yet built
-(details in [TODO.md](TODO.md)):
+The HTTP API, page serving, and WorkOS AuthKit authentication described
+above are implemented and tested (79 tests running against real D1/R2
+bindings in workerd). API bearer credentials are WorkOS access tokens
+verified against WorkOS's JWKS; browsers reach protected pages through an
+AuthKit login on the trusted apex followed by a one-time code handoff that
+sets a host-only session cookie for that exact page hostname. Local
+development can keep using the dev bearer stub via `AUTH_MODE=dev-stub` in
+`.dev.vars`. WorkOS setup (dashboard redirect URI + `wrangler secret put`
+for `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `AUTH_SECRET`) is described in
+[TODO.md](TODO.md).
 
-- [ ] **WorkOS AuthKit integration** — real bearer credentials, browser login
-      redirect, and host-only page sessions (replaces the dev auth stub)
+Not yet built (details in [TODO.md](TODO.md)):
+
 - [ ] **CLI** (`postpage publish/update/pull/list/sharing/delete` + device-flow login)
 - [ ] **Deployment** — Cloudflare account wiring, real D1/R2 resources, DNS
       and wildcard TLS for `*.pages.postpage.ai`
