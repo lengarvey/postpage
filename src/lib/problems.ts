@@ -75,6 +75,13 @@ export const problems = {
       title: "Page exceeds the upload limit",
       detail: `The maximum page size is ${maxBytes} bytes.`,
     }),
+  quotaExceeded: (c: Context, limit: number) =>
+    problem(c, {
+      status: 429,
+      code: "quota_exceeded",
+      title: "Daily page limit reached",
+      detail: `The limit is ${limit} pages per UTC day. Try again tomorrow.`,
+    }),
   emptyBody: (c: Context) =>
     problem(c, {
       status: 400,

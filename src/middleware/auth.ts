@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import type { Env } from "../env";
+import { GUEST_TOKEN_PREFIX, guestIdentityFromToken } from "../lib/guests";
 import { problems } from "../lib/problems";
 import { identityFromAccessToken } from "../lib/workos";
 
@@ -7,6 +8,8 @@ export interface Identity {
   userId: string;
   /** Verified email address, when the identity has one. */
   email: string | null;
+  /** Set when the identity is an anonymous-publishing guest account. */
+  guest?: boolean;
 }
 
 export interface AuthVariables {
@@ -51,6 +54,11 @@ export async function identityFromRequest(
 ): Promise<Identity | null> {
   const token = bearerToken(header);
   if (token === null) return null;
+  // Guest tokens carry a reserved prefix and resolve against D1 in every
+  // auth mode; they are minted by unauthenticated POST /v1/pages.
+  if (token.startsWith(GUEST_TOKEN_PREFIX)) {
+    return guestIdentityFromToken(env.DB, token);
+  }
   if (env.AUTH_MODE === "dev-stub") return devStubIdentity(token);
   return identityFromAccessToken(env, token);
 }

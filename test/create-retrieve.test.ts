@@ -26,10 +26,10 @@ describe("POST /v1/pages", () => {
     expect(await object?.text()).toBe(HTML);
   });
 
-  it("requires authentication", async () => {
+  it("rejects an invalid bearer token (anonymous is no-header only)", async () => {
     const res = await SELF.fetch(`${API}/v1/pages`, {
       method: "POST",
-      headers: { "Content-Type": "text/html" },
+      headers: { "Content-Type": "text/html", Authorization: "Bearer " },
       body: HTML,
     });
     expect(res.status).toBe(401);

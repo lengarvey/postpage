@@ -33,6 +33,9 @@
     // Local dev overrides this via .dev.vars (pages.localhost).
     "PAGES_DOMAIN": "pages.postpage.ai"
   },
+  // Daily expiry sweep (free-tier inactivity, guest TTL, deferred R2
+  // purges). Locally: `wrangler dev --test-scheduled` + /__scheduled.
+  "triggers": { "crons": ["0 3 * * *"] },
   "env": {
     "production": {
       // Deploys to the existing "postpage" Worker (not "postpage-production").
@@ -62,7 +65,8 @@
       ],
       "vars": {
         "PAGES_DOMAIN": "pages.postpage.ai"
-      }
+      },
+      "triggers": { "crons": ["0 3 * * *"] }
     }
   }
 }

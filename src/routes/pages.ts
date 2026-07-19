@@ -9,12 +9,14 @@ import {
   activateRevision,
   canView,
   createPage,
-  deletePage,
   getPage,
   getSharedEmails,
   getSharedEmailsForPages,
   listPages,
+  markPagesDeleted,
+  purgePageObjects,
   r2Key,
+  refreshLastVisited,
   replaceSharing,
   reserveRevision,
   toPageResource,
@@ -24,7 +26,21 @@ import {
 } from "../lib/pages";
 import { getCurrentHtml } from "../lib/serving";
 import { decodeCursor, encodeCursor } from "../lib/cursor";
-import { requireAuth, type AuthVariables } from "../middleware/auth";
+import { mintGuest } from "../lib/guests";
+import { getOwnerPlan, getOwnerPlans } from "../lib/plans";
+import {
+  ANONYMOUS_DAILY_LIMIT,
+  FREE_DAILY_LIMIT,
+  consumeQuota,
+  refundQuota,
+  utcDay,
+} from "../lib/quota";
+import {
+  identityFromRequest,
+  requireAuth,
+  type AuthVariables,
+  type Identity,
+} from "../middleware/auth";
 
 type ApiContext = { Bindings: Env; Variables: AuthVariables };
 
@@ -95,21 +111,78 @@ async function updatedPageResponse(
     updated.sharing_mode !== "specific_users"
       ? []
       : (knownEmails ?? (await getSharedEmails(c.env.DB, uuid)));
-  return c.json(toPageResource(c.env, updated, emails));
+  const plan = await getOwnerPlan(c.env.DB, updated.owner_id);
+  return c.json(toPageResource(c.env, updated, emails, plan));
 }
 
 export const pagesApi = new Hono<ApiContext>();
 
-pagesApi.use("*", requireAuth);
-
+/**
+ * POST / is the one route that accepts unauthenticated requests (anonymous
+ * publishing mints a guest account); every other route requires auth.
+ */
 pagesApi.post("/", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  let identity: Identity | null = null;
+  if (authHeader !== undefined) {
+    identity = await identityFromRequest(c.env, authHeader);
+    if (identity === null) {
+      return problems.unauthorized(c, "A valid bearer token is required.");
+    }
+  }
+
   const upload = await readHtmlUpload(c);
   if (upload instanceof Response) return upload;
 
-  const identity = c.get("identity");
-  const page = await createPage(c.env, identity.userId, upload);
-  return c.json(toPageResource(c.env, page, []), 201);
+  // Quota: signed-in users get a per-user counter; anonymous requests (and
+  // guest tokens, since minting a fresh guest is free) count per client IP.
+  const anonymous = identity === null || identity.guest === true;
+  const quotaKey = anonymous
+    ? `ip:${c.req.header("CF-Connecting-IP") ?? "unknown"}`
+    : `user:${identity!.userId}`;
+  const limit = anonymous ? ANONYMOUS_DAILY_LIMIT : FREE_DAILY_LIMIT;
+  const day = utcDay();
+  if (!(await consumeQuota(c.env.DB, quotaKey, day, limit))) {
+    return problems.quotaExceeded(c, limit);
+  }
+
+  // The guest token is derivable only from this response; it is stored
+  // hashed and there is no recovery.
+  let guestToken: string | undefined;
+  if (identity === null) {
+    const minted = await mintGuest(c.env.DB, new Date().toISOString());
+    identity = { userId: minted.guestId, email: null, guest: true };
+    guestToken = minted.token;
+  }
+
+  let page;
+  try {
+    page = await createPage(c.env, identity.userId, upload);
+  } catch (error) {
+    // Undo the resources this request claimed before failing, so a
+    // transient R2/D1 error doesn't permanently burn a quota slot or leave
+    // an orphaned, tokenless guest row behind.
+    await Promise.allSettled([
+      refundQuota(c.env.DB, quotaKey, day),
+      guestToken === undefined
+        ? Promise.resolve()
+        : c.env.DB.prepare("DELETE FROM guests WHERE id = ?")
+            .bind(identity.userId)
+            .run(),
+    ]);
+    throw error;
+  }
+  const plan = identity.guest === true
+    ? "anonymous"
+    : await getOwnerPlan(c.env.DB, identity.userId);
+  const resource = toPageResource(c.env, page, [], plan);
+  return c.json(
+    guestToken === undefined ? resource : { ...resource, guest_token: guestToken },
+    201,
+  );
 });
+
+pagesApi.use("*", requireAuth);
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -163,11 +236,20 @@ pagesApi.get("/", async (c) => {
       .filter((p) => p.sharing_mode === "specific_users")
       .map((p) => p.uuid),
   );
+  const plans = await getOwnerPlans(
+    c.env.DB,
+    pageRows.map((p) => p.owner_id),
+  );
 
   const last = pageRows[pageRows.length - 1];
   return c.json({
     pages: pageRows.map((p) =>
-      toPageResource(c.env, p, emailsByPage.get(p.uuid) ?? []),
+      toPageResource(
+        c.env,
+        p,
+        emailsByPage.get(p.uuid) ?? [],
+        plans.get(p.owner_id) ?? "free",
+      ),
     ),
     next_cursor:
       hasMore && last !== undefined
@@ -217,6 +299,10 @@ pagesApi.put("/:uuid", async (c) => {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 pagesApi.put("/:uuid/sharing", async (c) => {
+  // Guest pages stay locked to the viewer flow; guests cannot change sharing.
+  if (c.get("identity").guest === true) {
+    return problems.forbidden(c, "Guest pages cannot change sharing.");
+  }
   const page = await loadOwnedPage(c);
   if (page instanceof Response) return page;
 
@@ -281,7 +367,12 @@ pagesApi.delete("/:uuid", async (c) => {
   const page = await loadOwnedPage(c);
   if (page instanceof Response) return page;
 
-  await deletePage(c.env, page);
+  // Two-phase deletion: the rows vanish before the response; the R2 purge
+  // runs off the request path, with the daily cron as the crash backstop.
+  await markPagesDeleted(c.env.DB, [page], new Date().toISOString());
+  c.executionCtx.waitUntil(
+    purgePageObjects(c.env, page.uuid).catch(() => {}),
+  );
   return c.body(null, 204);
 });
 
@@ -309,6 +400,9 @@ pagesApi.get("/:uuid", async (c) => {
   const html = await getCurrentHtml(c.env.PAGES_BUCKET, page);
   if (html === null) return problems.pageNotFound(c);
 
+  // An API read of the content counts as a visit for free-tier expiry.
+  refreshLastVisited(c.env.DB, c.executionCtx, page);
+
   c.header("Vary", "Accept");
   if (representation === "html") {
     return c.body(html, 200, {
@@ -319,8 +413,9 @@ pagesApi.get("/:uuid", async (c) => {
       "Cache-Control": "no-store",
     });
   }
+  const plan = await getOwnerPlan(c.env.DB, page.owner_id);
   return c.json({
-    ...toPageResource(c.env, page, sharedEmails),
+    ...toPageResource(c.env, page, sharedEmails, plan),
     html: new TextDecoder().decode(html),
   });
 });

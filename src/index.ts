@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "./env";
+import { runExpirySweep } from "./lib/expiry";
 import { problems } from "./lib/problems";
 import { pagesApi } from "./routes/pages";
 import { serveApp } from "./routes/serve";
@@ -28,5 +29,16 @@ export default {
       return serveApp.fetch(request, env, ctx);
     }
     return apiApp.fetch(request, env, ctx);
+  },
+
+  // Daily expiry sweep + deferred R2 purges (ARCHITECTURE.md "Plans,
+  // quotas, and expiry"); bounded and idempotent, so a partial run just
+  // leaves work for the next day.
+  async scheduled(
+    event: ScheduledController,
+    env: Env,
+    _ctx: ExecutionContext,
+  ): Promise<void> {
+    await runExpirySweep(env, new Date(event.scheduledTime));
   },
 };
