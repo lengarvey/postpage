@@ -65,6 +65,10 @@ See [cli/README.md](cli/README.md).
 - [x] Device flow and public-client token refresh verified against the
       production WorkOS environment.
 
+- [x] Agent skill: [skills/postpage/SKILL.md](skills/postpage/SKILL.md) teaches
+      Claude Code and similar agents the CLI workflow (install by copying or
+      symlinking into `~/.claude/skills/postpage`).
+
 Remaining CLI follow-ups:
 
 - [ ] Publish the package to npm.

@@ -127,6 +127,17 @@ curl -s http://<hostname>.pages.localhost:8787/s/<uuid>
 curl -si http://pages.localhost:8787/r/<uuid>
 ```
 
+## Installing the agent skill
+
+[skills/postpage/SKILL.md](skills/postpage/SKILL.md) teaches Claude Code (and
+similar agents) to publish and manage pages via the CLI. Install it with:
+
+```sh
+cp -r skills/postpage ~/.claude/skills/postpage
+```
+
+(or symlink it to track the repo: `ln -s "$PWD/skills/postpage" ~/.claude/skills/postpage`).
+
 ## Status
 
 The HTTP API, page serving, and WorkOS AuthKit authentication described
