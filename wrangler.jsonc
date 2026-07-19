@@ -4,6 +4,8 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-03-10",
   "compatibility_flags": ["nodejs_compat"],
+  // Import .html files as strings (used for the landing page).
+  "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }],
   "d1_databases": [
     {
       "binding": "DB",
