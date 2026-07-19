@@ -1,0 +1,26 @@
+{
+  "name": "postpage",
+  "version": "0.0.1",
+  "description": "CLI for postpage.ai — publish a self-contained HTML document as an isolated static web page.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "bin": {
+    "postpage": "dist/main.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "~3.2.7"
+  }
+}

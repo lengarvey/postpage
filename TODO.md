@@ -39,20 +39,33 @@ dashboard for each environment):
 
 ## 2. CLI
 
-First-party interface over the HTTP API (architecture "CLI"). Buildable
-against the dev auth stub before item 1 lands.
+Implemented in [cli/](cli/) as an npm-packaged `postpage` bin (a pnpm
+workspace package; zero runtime dependencies, Node ≥ 20, built with tsc).
+See [cli/README.md](cli/README.md).
 
-- [ ] `postpage publish [file]` / `update <uuid> [file]` — file arg or piped
+- [x] `postpage publish [file]` / `update <uuid> [file]` — file arg or piped
       stdin; both provided is an error; neither (and no pipe) prints usage.
-- [ ] `postpage pull <uuid> --output <file>`
-- [ ] `postpage list [--collection owned|shared_with_me|all]` with cursor
-      handling.
-- [ ] `postpage sharing <uuid> private|public|specific_users --email …`
-- [ ] `postpage delete <uuid>`
-- [ ] `--json` output on all commands for agent/script use.
-- [ ] `postpage login` / `logout` — OAuth 2.0 Device Authorization flow via
-      WorkOS CLI Auth; local credential storage (depends on item 1).
-- [ ] Packaging decision (npm? single binary?).
+- [x] `postpage pull <uuid> --output <file>` (stdout without `--output`)
+- [x] `postpage list [--collection owned|shared_with_me|all]` with cursor
+      handling (`--cursor`, `--limit`, and `--all` to auto-paginate).
+- [x] `postpage sharing <uuid> private|public|specific_users --email …`
+- [x] `postpage delete <uuid>` (TTY confirmation; `--force` for scripts)
+- [x] `--json` output on all commands for agent/script use.
+- [x] `postpage login` / `logout` — OAuth 2.0 Device Authorization flow via
+      WorkOS CLI Auth (client id via `--client-id` /
+      `POSTPAGE_WORKOS_CLIENT_ID` until a production id is baked in), plus
+      `login --token` for the dev stub; credentials in
+      `~/.config/postpage/credentials.json` (0600), access tokens refreshed
+      automatically.
+- [x] Packaging decision: npm package `postpage` (single bin, no runtime
+      deps); revisit a single-binary build only if install friction shows up.
+
+Remaining CLI follow-ups:
+
+- [ ] Verify the device flow against the real WorkOS staging environment
+      (CLI Auth may need enabling per environment in the WorkOS dashboard).
+- [ ] Bake the production WorkOS client id into the CLI at release.
+- [ ] Publish the package to npm.
 
 ## 3. Deployment
 
