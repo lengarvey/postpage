@@ -92,37 +92,32 @@ with the login approval as the only human step. See the revised
       `http://pages.localhost:8787/auth/callback`).
 - [ ] **Self-serve signup**: enable AuthKit signup with Magic Auth + GitHub
       OAuth; disable password auth (WorkOS dashboard config, not code).
-- [ ] **Free-tier quotas and expiry** (mechanics decided 2026-07-19; see
-      ARCHITECTURE.md "Plans, quotas, and expiry"):
-      - Usage counter table keyed `(owner_id, UTC day)`, incremented with
-        page creation; deletes don't refund; exceeded → `429 quota_exceeded`.
-      - No update (PUT) limits for now — revision-storage growth is an
-        accepted risk to revisit.
-      - `plan` column on `users`, default `'free'`.
-      - `last_visited_at` (day granularity) on `pages`, initialized to
-        creation date, backfilled for existing pages; refreshed by any
-        authorized content read when >1 day stale, via `waitUntil`.
-      - Daily cron trigger (`triggers.crons` + `scheduled` handler) runs the
-        expiry sweep and batched two-phase deletion; absorbs the
-        background-deletion item below. No API-call rate limits.
-      - Computed `expires_at` in page JSON and `postpage list --json`.
-- [ ] **Anonymous publishing** — build together with quotas/expiry (semantics
-      decided 2026-07-19; see ARCHITECTURE.md "Anonymous publishing"):
-      - Unauthenticated `POST /v1/pages` mints a guest account with a hashed
-        bearer token; the guest owns the page and the token authorizes
-        update/pull/list/delete.
-      - Viewing is link-access locked to the first browser: first view mints
-        a host-only viewer cookie and binds the page to it; other browsers
-        get a lockout page that upsells signup (the conversion surface).
-        No reset — the binding is irrevocable for the page's 1-week life.
-        API reads with the guest token bypass the lock. No
-        claim-into-account flow yet.
-      - 5 pages/day per client IP via the same usage counter table.
-      - Fixed 1-week TTL from publish on the same cron sweep; expired guests
-        swept with their pages.
-- [ ] **CSP test suite**: with a shared serving origin the hosted-page CSP
-      is the isolation boundary — pin it with tests (absorbs the old
-      "verify CSP across browsers" deployment item).
+- [x] **Free-tier quotas and expiry** (done 2026-07-19; see ARCHITECTURE.md
+      "Plans, quotas, and expiry"): `usage_counters` keyed (key, UTC day)
+      with atomic check-and-increment (30/day free, no refunds on delete,
+      `429 quota_exceeded`); no PUT limits; `users.plan` (default `'free'`);
+      `pages.last_visited_at` (day granularity, backfilled, refreshed by any
+      authorized content read via `waitUntil`); daily cron
+      (`triggers.crons` in both wrangler envs + `scheduled` handler) runs
+      the expiry sweep (free pages 90 days unvisited, guest pages 1 week
+      past publish) and the two-phase deletion (mark in D1 + `r2_purge_queue`,
+      purge R2, idempotent) that the DELETE endpoint now also uses; computed
+      `expires_at` in page JSON / `postpage list --json`. Migration 0004.
+- [x] **Anonymous publishing** (done 2026-07-19, with quotas/expiry):
+      unauthenticated `POST /v1/pages` mints a guest account and returns the
+      bearer token once (`guest_token`, stored hashed); the token manages
+      the guest's pages normally and bypasses the viewer lock; browser
+      viewing is link-access locked to the first browser via a host-only
+      HTTP-only `pp_viewer` cookie (per-page binding row, irrevocable, no
+      claim flow), other browsers get a lockout page that upsells signup;
+      5 pages/day per client IP; fixed 1-week TTL on the cron sweep, which
+      also sweeps guest accounts whose pages have all expired.
+- [x] **CSP test suite**: the hosted-page CSP is pinned by
+      [test/serve.test.ts](test/serve.test.ts) ("applies the isolation
+      security headers"), which asserts the header string on a real served
+      response, including the public/private `frame-ancestors` split.
+      Verifying browser *enforcement* of CSP is the browsers' job, not ours
+      — the old "verify CSP across browsers" idea is dropped (2026-07-19).
 - [ ] **Login quickstart**: `postpage login` success prints the three-line
       publish/share quickstart (the human's onboarding moment; agents get
       theirs from the skill/MCP).
@@ -139,15 +134,15 @@ with the login approval as the only human step. See the revised
 - [x] Worker routes: custom domains `postpage.ai`, `api.postpage.ai`, and
       `pages.postpage.ai` in [wrangler.jsonc](wrangler.jsonc).
 - [x] Apply migrations to the production D1 (`wrangler d1 migrations apply`).
+      (Migration 0004 — quotas/guests — still awaits a remote apply + deploy.)
 - [ ] CI: run `pnpm test` + `pnpm typecheck` on PRs; deploy on main.
       (Deprioritized 2026-07-19 — not important right now.)
 
 ## 5. Hardening & operations (deferred in MVP)
 
-- [ ] **Background deletion**: R2 purge currently runs inline in the DELETE
-      request; move it onto the daily cron trigger decided for the expiry
-      sweep (section 3) so large pages can't slow or fail the request, and
-      orphaned objects (crash between D1 batch and R2 purge) get swept.
+- [x] **Background deletion** (done 2026-07-19 with the expiry work): DELETE
+      marks in D1 (tombstone + `r2_purge_queue`) and purges R2 via
+      `waitUntil`; the daily cron sweeps anything a crash left behind.
 - [ ] **Rate limits & quotas** for the invite-only release.
 - [ ] **Logging, metrics, alerts**, and audit retention.
 - [ ] **`shared_with_me` query scaling**: currently a table scan with a

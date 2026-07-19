@@ -20,6 +20,8 @@ export interface PageResource {
   sharing: { sharing_mode: string; emails?: string[] };
   created_at: string;
   updated_at: string;
+  /** When the page will be deleted if nothing changes; null = no expiry. */
+  expires_at: string | null;
 }
 
 export interface ListResponse {

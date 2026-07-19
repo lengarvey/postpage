@@ -1,5 +1,7 @@
 import type { Env } from "../env";
 import type { Identity } from "../middleware/auth";
+import { computeExpiresAt, type Plan } from "./plans";
+import { utcDay } from "./quota";
 
 /** Maximum upload size: 10 MiB. */
 export const MAX_PAGE_BYTES = 10_485_760;
@@ -17,6 +19,8 @@ export interface PageRow {
   sharing_mode: SharingMode;
   created_at: string;
   updated_at: string;
+  /** UTC day (YYYY-MM-DD) of the last authorized content read. */
+  last_visited_at: string;
 }
 
 export function r2Key(uuid: string, revision: number): string {
@@ -102,12 +106,15 @@ export interface PageResource {
   sharing: SharingConfig;
   created_at: string;
   updated_at: string;
+  /** When the page will be deleted if nothing changes; null = no expiry. */
+  expires_at: string | null;
 }
 
 export function toPageResource(
   env: Env,
   page: PageRow,
   sharedEmails: string[],
+  ownerPlan: Plan,
 ): PageResource {
   return {
     uuid: page.uuid,
@@ -116,6 +123,7 @@ export function toPageResource(
     sharing: sharingConfig(page, sharedEmails),
     created_at: page.created_at,
     updated_at: page.updated_at,
+    expires_at: computeExpiresAt(ownerPlan, page),
   };
 }
 
@@ -134,10 +142,10 @@ export async function createPage(
   const now = new Date().toISOString();
 
   await env.DB.prepare(
-    `INSERT INTO pages (uuid, owner_id, current_revision, next_revision, sharing_mode, created_at, updated_at)
-     VALUES (?, ?, NULL, 2, 'private', ?, ?)`,
+    `INSERT INTO pages (uuid, owner_id, current_revision, next_revision, sharing_mode, created_at, updated_at, last_visited_at)
+     VALUES (?, ?, NULL, 2, 'private', ?, ?, ?)`,
   )
-    .bind(uuid, ownerId, now, now)
+    .bind(uuid, ownerId, now, now, now.slice(0, 10))
     .run();
 
   try {
@@ -314,26 +322,65 @@ export async function replaceSharing(
   await db.batch(statements);
 }
 
-/**
- * Delete a page: tombstone it and remove its rows in one atomic batch (all
- * API and page reads fail immediately), then purge every R2 revision object.
- */
-export async function deletePage(env: Env, page: PageRow): Promise<void> {
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO tombstones (uuid, owner_id, deleted_at)
-       VALUES (?, ?, ?)`,
-    ).bind(page.uuid, page.owner_id, new Date().toISOString()),
-    // Cascades remove revisions and page_permissions.
-    env.DB.prepare("DELETE FROM pages WHERE uuid = ?").bind(page.uuid),
-  ]);
+// Pages per db.batch() call (3 statements per page, so ~300 statements per
+// batch) — comfortably under D1's per-batch statement limits, without
+// issuing so many chunks that round trips dominate.
+const MARK_CHUNK_SIZE = 100;
 
-  // Purge by prefix rather than from the revisions table so objects written
-  // by a concurrently racing update are removed as well.
+/**
+ * Two-phase deletion, phase 1: tombstone the pages, remove their rows, and
+ * enqueue their R2 purge. All API and page reads fail immediately; the
+ * objects are purged by `purgePageObjects` (waitUntil on the DELETE
+ * endpoint, plus the daily cron for anything left behind).
+ *
+ * Issued as multiple sequential `db.batch()` calls of at most
+ * MARK_CHUNK_SIZE pages each, rather than one giant batch, since a sweep can
+ * pass hundreds of pages at once and D1 rejects overly large batches
+ * outright. Each chunk is atomic, but chunks are not atomic with each other
+ * — that's fine because this whole mechanism is idempotent by design (see
+ * above: a crash leaves only marked-but-unpurged objects the next run
+ * sweeps), so a crash between chunks just means the remaining pages get
+ * picked up next time.
+ */
+export async function markPagesDeleted(
+  db: D1Database,
+  pages: readonly Pick<PageRow, "uuid" | "owner_id">[],
+  now: string,
+): Promise<void> {
+  if (pages.length === 0) return;
+  for (let i = 0; i < pages.length; i += MARK_CHUNK_SIZE) {
+    const chunk = pages.slice(i, i + MARK_CHUNK_SIZE);
+    await db.batch(
+      chunk.flatMap((page) => [
+        db
+          .prepare(
+            "INSERT INTO tombstones (uuid, owner_id, deleted_at) VALUES (?, ?, ?)",
+          )
+          .bind(page.uuid, page.owner_id, now),
+        // Cascades remove revisions, page_permissions, and page_viewers.
+        db.prepare("DELETE FROM pages WHERE uuid = ?").bind(page.uuid),
+        db
+          .prepare(
+            `INSERT INTO r2_purge_queue (page_uuid, enqueued_at) VALUES (?, ?)
+             ON CONFLICT (page_uuid) DO NOTHING`,
+          )
+          .bind(page.uuid, now),
+      ]),
+    );
+  }
+}
+
+/**
+ * Two-phase deletion, phase 2: purge a marked page's R2 objects, then drop
+ * its purge-queue row. Idempotent — a crash leaves the row for the next
+ * cron run. Purges by prefix rather than from the (deleted) revisions rows
+ * so objects written by a concurrently racing update are removed as well.
+ */
+export async function purgePageObjects(env: Env, uuid: string): Promise<void> {
   let cursor: string | undefined;
   do {
     const listing = await env.PAGES_BUCKET.list({
-      prefix: `pages/${page.uuid}/`,
+      prefix: `pages/${uuid}/`,
       cursor,
     });
     if (listing.objects.length > 0) {
@@ -341,4 +388,33 @@ export async function deletePage(env: Env, page: PageRow): Promise<void> {
     }
     cursor = listing.truncated ? listing.cursor : undefined;
   } while (cursor !== undefined);
+  await env.DB.prepare("DELETE FROM r2_purge_queue WHERE page_uuid = ?")
+    .bind(uuid)
+    .run();
+}
+
+/**
+ * Record an authorized content read for free-tier expiry: bump the page's
+ * `last_visited_at` day, but only when it is stale, and always off the
+ * response path via waitUntil. Worst case one UPDATE per page per day.
+ */
+export function refreshLastVisited(
+  db: D1Database,
+  // Structural type: Hono's executionCtx and workers-types' ExecutionContext
+  // disagree on optional members, but both can waitUntil.
+  ctx: { waitUntil(promise: Promise<unknown>): void },
+  page: PageRow,
+  now: Date = new Date(),
+): void {
+  const today = utcDay(now);
+  if (page.last_visited_at >= today) return;
+  ctx.waitUntil(
+    db
+      .prepare(
+        "UPDATE pages SET last_visited_at = ?1 WHERE uuid = ?2 AND last_visited_at < ?1",
+      )
+      .bind(today, page.uuid)
+      .run()
+      .then(() => {}),
+  );
 }

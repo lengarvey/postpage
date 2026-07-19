@@ -144,20 +144,31 @@ cp -r skills/postpage ~/.claude/skills/postpage
 
 ## Status
 
-The HTTP API, page serving, and WorkOS AuthKit authentication described
-above are implemented and tested (71 tests running against real D1/R2
-bindings in workerd). API bearer credentials are WorkOS access tokens
-verified against WorkOS's JWKS; browsers reach protected pages through an
-AuthKit login whose callback sets one host-only session cookie on the
-`pages.postpage.ai` serving origin. Local
-development can keep using the dev bearer stub via `AUTH_MODE=dev-stub` in
-`.dev.vars`. WorkOS setup (dashboard redirect URI + `wrangler secret put`
-for `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `AUTH_SECRET`) is described in
-[TODO.md](TODO.md).
+The HTTP API, page serving, WorkOS AuthKit authentication, the `postpage`
+CLI (published to npm), and production deployment described above are
+implemented and tested (90 tests running against real D1/R2 bindings in
+workerd). API bearer credentials are WorkOS access tokens verified against
+WorkOS's JWKS; browsers reach protected pages through an AuthKit login whose
+callback sets one host-only session cookie on the `pages.postpage.ai`
+serving origin. Local development can keep using the dev bearer stub via
+`AUTH_MODE=dev-stub` in `.dev.vars`. WorkOS setup (dashboard redirect URI +
+`wrangler secret put` for `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`,
+`AUTH_SECRET`) is described in [TODO.md](TODO.md).
+
+Free-tier quotas, expiry, and anonymous publishing (ARCHITECTURE.md "Plans,
+quotas, and expiry") are implemented: creation is capped at 30 pages/UTC day
+for signed-in users and 5/day per client IP for anonymous publishing
+(`429 quota_exceeded`; deletes never refund). An unauthenticated
+`POST /v1/pages` mints a guest account whose bearer token is returned once
+in the response (`guest_token`); guest pages are link-access locked to the
+first browser that opens them and live 1 week from publish. Free-tier pages
+expire after 3 months without a visit; any authorized content read refreshes
+the clock, and page JSON carries a computed `expires_at`. A daily cron
+trigger sweeps expired pages and runs the two-phase R2 purge that the DELETE
+endpoint also uses.
 
 Not yet built (details in [TODO.md](TODO.md)):
 
-- [ ] **CLI** (`postpage publish/update/pull/list/sharing/delete` + device-flow login)
-- [ ] **Deployment** — Cloudflare account wiring, real D1/R2 resources, DNS
-      and wildcard TLS for `*.pages.postpage.ai`
-- [ ] Background deletion, rate limits, logging/metrics (deferred in the MVP)
+- [ ] Self-serve signup configuration in the WorkOS dashboard (Magic Auth +
+      GitHub OAuth, password auth disabled)
+- [ ] Login quickstart, CI, logging/metrics (deferred)
