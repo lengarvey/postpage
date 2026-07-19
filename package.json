@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "wrangler dev",
+    "deploy:prod": "wrangler deploy --env production",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

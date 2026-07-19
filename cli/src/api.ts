@@ -15,9 +15,7 @@ const LOGIN_HINT =
 
 export interface PageResource {
   uuid: string;
-  hostname: string;
   url: string;
-  resolver_url: string;
   current_revision: number;
   sharing: { sharing_mode: string; emails?: string[] };
   created_at: string;

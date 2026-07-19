@@ -195,7 +195,6 @@ describe("PUT /v1/pages/{uuid}/sharing", () => {
     });
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.uuid).toBe(page.uuid);
-    expect(body.hostname).toBe(page.hostname);
     expect(body.url).toBe(page.url);
   });
 });
@@ -223,13 +222,13 @@ describe("DELETE /v1/pages/{uuid}", () => {
     });
     expect(listed.objects).toEqual([]);
 
-    // Tombstone retains uuid, hostname, owner, and deletion time.
+    // Tombstone retains uuid, owner, and deletion time.
     const tombstone = await env.DB.prepare(
       "SELECT * FROM tombstones WHERE uuid = ?",
     )
       .bind(page.uuid)
       .first<Record<string, unknown>>();
-    expect(tombstone?.hostname).toBe(page.hostname);
+    expect(tombstone?.uuid).toBe(page.uuid);
     expect(tombstone?.owner_id).toBe("user-1");
     expect(tombstone?.deleted_at).toBeTruthy();
 

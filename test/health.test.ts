@@ -32,10 +32,7 @@ describe("scaffold", () => {
     expect(html).toContain("<!doctype html>");
   });
 
-  it("does not serve the landing page on page hosts or the apex", async () => {
-    expect(
-      (await SELF.fetch("https://amber-otter-k7.pages.postpage.ai/")).status,
-    ).toBe(404);
+  it("does not serve the landing page on the serving origin", async () => {
     expect((await SELF.fetch("https://pages.postpage.ai/")).status).toBe(404);
   });
 

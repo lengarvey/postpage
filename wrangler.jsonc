@@ -1,21 +1,18 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "postpage",
+  // The top-level environment is local development (`wrangler dev`, vitest).
+  // It deliberately has no routes: when routes are present, `wrangler dev`
+  // rewrites every request's URL/Host to the first route's host, which breaks
+  // the host-based dispatch between the API and pages origins. Production
+  // config (routes + real name) lives in env.production below; deploy with
+  // `pnpm deploy:prod` (= `wrangler deploy --env production`; the script is not
+  // named plain "deploy" because pnpm's built-in `pnpm deploy` would shadow it).
+  "name": "postpage-dev",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-10",
   "compatibility_flags": ["nodejs_compat"],
   // Import .html files as strings (used for the landing page).
   "rules": [{ "type": "Text", "globs": ["**/*.html"], "fallthrough": true }],
-  "routes": [
-    // Apex serves the landing page + API; api.* is an alias for the API.
-    { "pattern": "postpage.ai", "custom_domain": true },
-    { "pattern": "api.postpage.ai", "custom_domain": true },
-    // Resolver origin for hosted pages.
-    { "pattern": "pages.postpage.ai", "custom_domain": true },
-    // Hosted-page origins. Custom domains can't be wildcards, so this is a
-    // zone route; it needs a proxied `*.pages` DNS record to receive traffic.
-    { "pattern": "*.pages.postpage.ai/*", "zone_name": "postpage.ai" }
-  ],
   "observability": { "enabled": true },
   "d1_databases": [
     {
@@ -32,7 +29,40 @@
     }
   ],
   "vars": {
-    // Base domain for hosted pages; friendly hostnames are subdomains of this.
+    // Host that serves pages at /{uuid} (and the /auth/* login routes).
+    // Local dev overrides this via .dev.vars (pages.localhost).
     "PAGES_DOMAIN": "pages.postpage.ai"
+  },
+  "env": {
+    "production": {
+      // Deploys to the existing "postpage" Worker (not "postpage-production").
+      "name": "postpage",
+      "routes": [
+        // Apex serves the landing page + API; api.* is an alias for the API.
+        { "pattern": "postpage.ai", "custom_domain": true },
+        { "pattern": "api.postpage.ai", "custom_domain": true },
+        // Serving origin: pages at /{uuid} plus the /auth/* login routes.
+        { "pattern": "pages.postpage.ai", "custom_domain": true }
+      ],
+      // Bindings and vars are non-inheritable in wrangler environments, so
+      // they are repeated here and must be kept in sync with the top level.
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "postpage",
+          "database_id": "25902203-10a8-460d-9467-698ff8ca7c1b",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "PAGES_BUCKET",
+          "bucket_name": "postpage-pages"
+        }
+      ],
+      "vars": {
+        "PAGES_DOMAIN": "pages.postpage.ai"
+      }
+    }
   }
 }

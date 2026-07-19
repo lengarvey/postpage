@@ -90,7 +90,6 @@ function printPage(page: PageResource, heading: string): void {
   const emails = page.sharing.emails;
   console.log(`${heading}
   url:       ${page.url}
-  share url: ${page.resolver_url}
   uuid:      ${page.uuid}
   revision:  ${page.current_revision}
   sharing:   ${page.sharing.sharing_mode}${

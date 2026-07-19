@@ -33,8 +33,9 @@ if `cli/dist/` is missing). Production defaults are baked in — no env vars or
    postpage publish report.html --json     # or: generate-report | postpage publish --json
    ```
 
-   The JSON includes `uuid`, `url`, `resolver_url`, `current_revision`, and
-   `sharing`. Save the `uuid` — you need it for every later operation.
+   The JSON includes `uuid`, `url` (`https://pages.postpage.ai/{uuid}`),
+   `current_revision`, and `sharing`. Save the `uuid` — you need it for every
+   later operation.
 3. **Sharing**: pages default to **private** (only the owner can view). To make
    the link work for anyone, or share with specific people:
 
@@ -59,5 +60,5 @@ if `cli/dist/` is missing). Production defaults are baked in — no env vars or
 ## Deleting
 
 `postpage delete <uuid> --force` is **immediate and irreversible** — all
-revisions are destroyed and the hostname is never reused. Only delete when the
+revisions are destroyed and the URL is never reused. Only delete when the
 human explicitly asks, and confirm the uuid against `postpage list` first.

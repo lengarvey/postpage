@@ -156,7 +156,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
     <div class="step">
       <span class="cmd">$ postpage publish page.html</span>
       <h3>Publish</h3>
-      <p>Send raw HTML from a file or a pipe. You get back a stable UUID and a friendly hostname like <code style="font-family:var(--mono)">amber-otter-k7</code>. New pages are private.</p>
+      <p>Send raw HTML from a file or a pipe. You get back a stable URL built on a server-generated UUID. New pages are private.</p>
     </div>
     <div class="step">
       <span class="cmd">$ postpage update &lt;uuid&gt;</span>
@@ -173,10 +173,10 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
 
 <section id="isolation">
   <p class="sec-label">Isolation</p>
-  <h2>Every page is its own origin.</h2>
+  <h2>Every page is sealed off.</h2>
   <p class="sec-lede">Uploaded HTML is untrusted and may run arbitrary inline JavaScript. Postpage treats that as the default case, not the edge case.</p>
   <div class="feat-grid">
-    <div class="feat"><h3>One subdomain per page</h3><p>Each page lives at its own hostname, so the browser's same-origin policy walls every page off from every other page — even for a visitor authorized to see both.</p></div>
+    <div class="feat"><h3>Pages can't read each other</h3><p>The Content Security Policy blocks all outbound requests, so one page's JavaScript can never fetch another page or exfiltrate anything it computes — even for a visitor authorized to see both.</p></div>
     <div class="feat"><h3>Bytes served unchanged</h3><p>No injected scripts, no rewriting, no "powered by" banner. What you upload is exactly what visitors receive, byte for byte.</p></div>
     <div class="feat"><h3>Network-sealed by CSP</h3><p>Inline script, style, and data: assets run freely. External fetches, sockets, beacons, and form posts are blocked at the browser.</p></div>
     <div class="feat"><h3>Auth enforced at the edge</h3><p>Every request passes through the Worker. HTML bytes are cached; authorization decisions never are. The storage bucket is private.</p></div>
@@ -244,8 +244,8 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var lines = [
     {t:'cmd',  text:'generate-report | postpage publish'},
-    {t:'ok',   text:'✓ published amber-otter-k7 (rev 00000001, 48.2 KiB)'},
-    {t:'url',  text:'https://amber-otter-k7.pages.postpage.ai/s/9f2c1a7e-…'},
+    {t:'ok',   text:'✓ published (rev 00000001, 48.2 KiB)'},
+    {t:'url',  text:'https://pages.postpage.ai/9f2c1a7e-…'},
     {t:'cmd',  text:'postpage sharing 9f2c1a7e public'},
     {t:'ok',   text:'✓ sharing_mode: public — effective on next request'}
   ];

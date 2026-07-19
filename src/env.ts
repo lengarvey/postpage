@@ -1,7 +1,7 @@
 export interface Env {
   DB: D1Database;
   PAGES_BUCKET: R2Bucket;
-  /** Base domain for hosted pages; used to match request hostnames. */
+  /** Host that serves pages at /{uuid}; used to match request hostnames. */
   PAGES_DOMAIN: string;
   /**
    * Optional override for the origin used when *rendering* page URLs,
