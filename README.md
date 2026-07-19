@@ -16,22 +16,22 @@ generate-report | curl -s -X POST https://api.postpage.ai/v1/pages \
 
 ## What makes it different
 
-- **Every page is its own browser origin.** Each page gets a unique,
-  never-reused hostname (`amber-otter-k7.pages.postpage.ai`), so one page's
-  JavaScript can never read another page — even when a visitor is authorized
-  for both.
 - **Pages are hermetic.** A strict Content Security Policy allows fully
   inline HTML/CSS/JS/SVG but blocks all external subresources and outbound
   connections (`fetch`, websockets, beacons, form posts). Uploaded documents
-  render; they don't phone home.
+  render; they don't phone home. The CSP is also the isolation boundary
+  between pages, which share the `pages.postpage.ai` origin: one page's
+  JavaScript cannot fetch another page or exfiltrate anything it computes,
+  and the API lives on a separate origin the session cookie never reaches.
 - **Sharing is enforced at the edge, on every request.** A page is `private`
   (owner only), `public` (anyone with the URL), or shared with
   `specific_users` by email. Changing the mode takes effect on the next
-  request — the URL never changes, and nothing needs a cache purge.
+  request — the URL (`https://pages.postpage.ai/{uuid}`) never changes, and
+  nothing needs a cache purge.
 - **Updates are revisions.** Every `PUT` writes a new immutable revision;
   bytes are stored unchanged and old revisions are retained while the page
   exists. Deletion is immediate and irreversible, leaving only a tombstone so
-  the hostname is never reassigned.
+  the page URL is never reassigned.
 - **Not discoverable by default.** Pages are unlisted, `noindex`, and served
   with `no-referrer`. Public means "anyone with the complete URL", nothing
   more.
@@ -51,7 +51,7 @@ All endpoints require a bearer token. Errors are RFC 9457
 | `PUT /v1/pages/{uuid}/sharing` | Replace the sharing configuration. |
 | `DELETE /v1/pages/{uuid}` | Delete the page and all revisions. Irreversible. |
 | `GET /v1/pages?collection=owned\|shared_with_me\|all` | List pages, newest-updated first, cursor-paginated. |
-| `GET pages.postpage.ai/r/{uuid}` | Convenience resolver → 302 to the canonical page URL. |
+| `GET pages.postpage.ai/{uuid}` | The page itself (browser serving path, not the API). |
 
 ## Stack
 
@@ -76,9 +76,9 @@ pnpm typecheck
 
 ```
 migrations/        D1 schema migrations
-src/index.ts       host-based dispatch: API / apex resolver / page hosts
-src/routes/        pages API (/v1/pages...), page serving + resolver
-src/lib/           storage, naming, negotiation, cursors, serving headers
+src/index.ts       host-based dispatch: API origin / pages serving origin
+src/routes/        pages API (/v1/pages...), page serving + browser auth
+src/lib/           storage, negotiation, cursors, serving headers
 src/middleware/    dev auth stub (to be replaced by WorkOS AuthKit)
 test/              integration + unit tests
 ```
@@ -102,10 +102,10 @@ PAGES_URL_BASE=http://pages.localhost:8787
 EOF
 ```
 
-With that, the API stays on `http://localhost:8787`, page URLs returned by the
-API look like `http://{hostname}.pages.localhost:8787/s/{uuid}` and open
-straight in a browser (make the page public first, since browser login is not
-wired up yet), and the resolver lives at `http://pages.localhost:8787/r/{uuid}`.
+With that, the API stays on `http://localhost:8787` and page URLs returned by
+the API look like `http://pages.localhost:8787/{uuid}` and open straight in a
+browser (make the page public first, or configure WorkOS for local browser
+login).
 
 ### Trying it locally
 
@@ -121,10 +121,7 @@ curl -s -X PUT http://localhost:8787/v1/pages/<uuid>/sharing \
   -d '{"sharing_mode":"public"}'
 
 # open the returned url in a browser, or view it with curl
-curl -s http://<hostname>.pages.localhost:8787/s/<uuid>
-
-# resolver redirect
-curl -si http://pages.localhost:8787/r/<uuid>
+curl -s http://pages.localhost:8787/<uuid>
 ```
 
 ## Installing the agent skill
@@ -141,11 +138,11 @@ cp -r skills/postpage ~/.claude/skills/postpage
 ## Status
 
 The HTTP API, page serving, and WorkOS AuthKit authentication described
-above are implemented and tested (79 tests running against real D1/R2
+above are implemented and tested (71 tests running against real D1/R2
 bindings in workerd). API bearer credentials are WorkOS access tokens
 verified against WorkOS's JWKS; browsers reach protected pages through an
-AuthKit login on the trusted apex followed by a one-time code handoff that
-sets a host-only session cookie for that exact page hostname. Local
+AuthKit login whose callback sets one host-only session cookie on the
+`pages.postpage.ai` serving origin. Local
 development can keep using the dev bearer stub via `AUTH_MODE=dev-stub` in
 `.dev.vars`. WorkOS setup (dashboard redirect URI + `wrangler secret put`
 for `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `AUTH_SECRET`) is described in
