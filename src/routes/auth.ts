@@ -113,7 +113,14 @@ export async function authCallback(c: Ctx): Promise<Response> {
   );
   const target = state === null ? null : parsePageTarget(c.env, state.r);
   if (target === null) {
-    return c.text("Login request is invalid or expired", 400);
+    // The signed return-destination is missing or stale (e.g. a login started
+    // before a redeploy, or a sign-up detour that dropped `state`). The
+    // AuthKit session itself may well have succeeded, so reopening the page
+    // link restarts the round-trip without prompting again.
+    return c.text(
+      "This login link has expired. Open the page you were trying to view again to finish signing in.",
+      400,
+    );
   }
   const code = c.req.query("code");
   if (!code) {
