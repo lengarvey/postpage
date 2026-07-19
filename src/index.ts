@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import { problems } from "./lib/problems";
 import { pagesApi } from "./routes/pages";
 import { resolveRedirect, resolverApp, serveApp } from "./routes/serve";
+import homepageHtml from "../design/homepage.html";
 
 /**
  * API origin. The resolver route is also mounted here so local development
@@ -10,6 +11,9 @@ import { resolveRedirect, resolverApp, serveApp } from "./routes/serve";
  * problem+json like every other API error.
  */
 const apiApp = new Hono<{ Bindings: Env }>();
+// Landing page on the main origin. Hosted-page origins and the pages apex
+// never serve it; their dispatch branches keep their own 404 rules.
+apiApp.get("/", (c) => c.html(homepageHtml));
 apiApp.get("/healthz", (c) => c.json({ ok: true }));
 apiApp.route("/v1/pages", pagesApi);
 apiApp.get("/r/:uuid", resolveRedirect);

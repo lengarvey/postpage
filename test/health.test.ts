@@ -23,6 +23,22 @@ describe("scaffold", () => {
     );
   });
 
+  it("serves the landing page at the main origin root", async () => {
+    const res = await SELF.fetch("http://api.local/");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("text/html");
+    const html = await res.text();
+    expect(html).toContain("Postpage");
+    expect(html).toContain("<!doctype html>");
+  });
+
+  it("does not serve the landing page on page hosts or the apex", async () => {
+    expect(
+      (await SELF.fetch("https://amber-otter-k7.pages.postpage.ai/")).status,
+    ).toBe(404);
+    expect((await SELF.fetch("https://pages.postpage.ai/")).status).toBe(404);
+  });
+
   it("returns problem+json for unknown API paths", async () => {
     const res = await SELF.fetch("http://api.local/v1/nope");
     expect(res.status).toBe(404);
