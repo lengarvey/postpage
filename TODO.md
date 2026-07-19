@@ -35,28 +35,39 @@ dashboard for each environment):
 - [x] Production secrets: `wrangler secret put WORKOS_API_KEY`,
       `WORKOS_CLIENT_ID`, and `AUTH_SECRET` (any long random string; signs
       the OAuth `state`). Do **not** set `AUTH_MODE` in production.
-- [ ] Consider raising the AuthKit access-token lifetime for API/CLI
-      ergonomics until the CLI's refresh handling lands.
+- [x] Consider raising the AuthKit access-token lifetime for API/CLI
+      ergonomics until the CLI's refresh handling lands. (Moot: the CLI
+      refreshes tokens automatically.)
 
 ## 2. CLI
 
-First-party interface over the HTTP API (architecture "CLI"). Buildable
-against the dev auth stub before item 1 lands.
+Implemented in [cli/](cli/) as an npm-packaged `postpage` bin (a pnpm
+workspace package; zero runtime dependencies, Node ≥ 20, built with tsc).
+See [cli/README.md](cli/README.md).
 
-- [ ] `postpage publish [file]` / `update <uuid> [file]` — file arg or piped
+- [x] `postpage publish [file]` / `update <uuid> [file]` — file arg or piped
       stdin; both provided is an error; neither (and no pipe) prints usage.
-- [ ] `postpage pull <uuid> --output <file>`
-- [ ] `postpage list [--collection owned|shared_with_me|all]` with cursor
-      handling.
-- [ ] `postpage sharing <uuid> private|public|specific_users --email …`
-- [ ] `postpage delete <uuid>`
-- [ ] `--json` output on all commands for agent/script use.
+- [x] `postpage pull <uuid> --output <file>` (stdout without `--output`)
+- [x] `postpage list [--collection owned|shared_with_me|all]` with cursor
+      handling (`--cursor`, `--limit`, and `--all` to auto-paginate).
+- [x] `postpage sharing <uuid> private|public|specific_users --email …`
+- [x] `postpage delete <uuid>` (TTY confirmation; `--force` for scripts)
+- [x] `--json` output on all commands for agent/script use.
 - [x] `postpage login` / `logout` — OAuth 2.0 Device Authorization flow via
-      WorkOS CLI Auth; local credential storage. Implemented in
-      [cli/postpage.mjs](cli/postpage.mjs) (zero-dep Node script) along with
-      `token` (prints a fresh access token, auto-refreshing) and `whoami`;
-      scripts use `Authorization: Bearer $(postpage token)`.
-- [ ] Packaging decision (npm? single binary?).
+      WorkOS CLI Auth (production client id baked in; `--client-id` /
+      `POSTPAGE_WORKOS_CLIENT_ID` override), plus `login --token` for the
+      dev stub; credentials in `~/.config/postpage/credentials.json` (0600),
+      access tokens refreshed automatically. `postpage token` prints a fresh
+      access token and `whoami` the signed-in user, so scripts can use
+      `Authorization: Bearer $(postpage token)`.
+- [x] Packaging decision: npm package `postpage` (single bin, no runtime
+      deps); revisit a single-binary build only if install friction shows up.
+- [x] Device flow and public-client token refresh verified against the
+      production WorkOS environment.
+
+Remaining CLI follow-ups:
+
+- [ ] Publish the package to npm.
 
 ## 3. Deployment
 
