@@ -130,7 +130,8 @@ curl -si http://pages.localhost:8787/r/<uuid>
 ## Status
 
 The HTTP API and page serving described above are implemented and tested
-(62 tests running against real D1/R2 bindings in workerd). Not yet built:
+(62 tests running against real D1/R2 bindings in workerd). Not yet built
+(details in [TODO.md](TODO.md)):
 
 - [ ] **WorkOS AuthKit integration** — real bearer credentials, browser login
       redirect, and host-only page sessions (replaces the dev auth stub)
