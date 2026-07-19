@@ -72,8 +72,7 @@ See [cli/README.md](cli/README.md).
 
 Remaining CLI follow-ups:
 
-- [ ] Publish the package to npm (the `postpage` name was unclaimed as of
-      2026-07-19 — grab it).
+- [x] Publish the package to npm (done 2026-07-19).
 
 ## 3. Self-serve launch (product direction decided 2026-07-19)
 
@@ -88,20 +87,42 @@ with the login approval as the only human step. See the revised
       wildcard ACM cert and zone route. Existing pages: none that matter.
 - [ ] **Self-serve signup**: enable AuthKit signup with Magic Auth + GitHub
       OAuth; disable password auth (WorkOS dashboard config, not code).
-- [ ] **Free-tier quotas and expiry**: 30 pages/day per user; pages deleted
-      after 3 months without a visit. `last_visited_at` written from the
-      serving path only when >1 day stale, via `waitUntil`; the expiry
-      sweep shares the background-deletion machinery below. No API-call
-      rate limits.
+- [ ] **Free-tier quotas and expiry** (mechanics decided 2026-07-19; see
+      ARCHITECTURE.md "Plans, quotas, and expiry"):
+      - Usage counter table keyed `(owner_id, UTC day)`, incremented with
+        page creation; deletes don't refund; exceeded → `429 quota_exceeded`.
+      - No update (PUT) limits for now — revision-storage growth is an
+        accepted risk to revisit.
+      - `plan` column on `users`, default `'free'`.
+      - `last_visited_at` (day granularity) on `pages`, initialized to
+        creation date, backfilled for existing pages; refreshed by any
+        authorized content read when >1 day stale, via `waitUntil`.
+      - Daily cron trigger (`triggers.crons` + `scheduled` handler) runs the
+        expiry sweep and batched two-phase deletion; absorbs the
+        background-deletion item below. No API-call rate limits.
+      - Computed `expires_at` in page JSON and `postpage list --json`.
+- [ ] **Anonymous publishing** — build together with quotas/expiry (semantics
+      decided 2026-07-19; see ARCHITECTURE.md "Anonymous publishing"):
+      - Unauthenticated `POST /v1/pages` mints a guest account with a hashed
+        bearer token; the guest owns the page and the token authorizes
+        update/pull/list/delete.
+      - Viewing is link-access locked to the first browser: first view mints
+        a host-only viewer cookie and binds the page to it; other browsers
+        get a lockout page that upsells signup (the conversion surface).
+        No reset — the binding is irrevocable for the page's 1-week life.
+        API reads with the guest token bypass the lock. No
+        claim-into-account flow yet.
+      - 5 pages/day per client IP via the same usage counter table.
+      - Fixed 1-week TTL from publish on the same cron sweep; expired guests
+        swept with their pages.
 - [ ] **CSP test suite**: with a shared serving origin the hosted-page CSP
       is the isolation boundary — pin it with tests (absorbs the old
       "verify CSP across browsers" deployment item).
 - [ ] **Login quickstart**: `postpage login` success prints the three-line
       publish/share quickstart (the human's onboarding moment; agents get
       theirs from the skill/MCP).
-- [ ] Later tiers, in ARCHITECTURE.md but not yet scheduled: anonymous
-      publishing (5/day, private only, 1-week TTL — "private" semantics
-      TBD) and paid (100/day, `specific_users`, MCP access, no expiry).
+- [ ] Later tier, in ARCHITECTURE.md but not yet scheduled: paid (100/day,
+      `specific_users`, MCP access, no expiry).
 
 ## 4. Deployment
 
@@ -115,13 +136,14 @@ with the login approval as the only human step. See the revised
       all in [wrangler.jsonc](wrangler.jsonc).
 - [x] Apply migrations to the production D1 (`wrangler d1 migrations apply`).
 - [ ] CI: run `pnpm test` + `pnpm typecheck` on PRs; deploy on main.
+      (Deprioritized 2026-07-19 — not important right now.)
 
 ## 5. Hardening & operations (deferred in MVP)
 
 - [ ] **Background deletion**: R2 purge currently runs inline in the DELETE
-      request; move to a queue/scheduled cleanup so large pages can't slow or
-      fail the request, and orphaned objects (crash between D1 batch and R2
-      purge) get swept.
+      request; move it onto the daily cron trigger decided for the expiry
+      sweep (section 3) so large pages can't slow or fail the request, and
+      orphaned objects (crash between D1 batch and R2 purge) get swept.
 - [ ] **Rate limits & quotas** for the invite-only release.
 - [ ] **Logging, metrics, alerts**, and audit retention.
 - [ ] **`shared_with_me` query scaling**: currently a table scan with a

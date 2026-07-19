@@ -122,13 +122,34 @@ Publishing limits and page lifetime are the product's rate limiting; no separate
 
 | Plan | Pages per day | Sharing modes | Page lifetime |
 | --- | --- | --- | --- |
-| Anonymous *(future)* | 5 | private only | deleted 1 week after publish |
+| Anonymous | 5 | link-access, locked to first browser | deleted 1 week after publish |
 | Free (signed in) | 30 | private, public | deleted after 3 months without a visit |
 | Paid *(future)* | 100 | private, public, specific_users | never expires |
 
-Free-tier expiry is activity-based, not fixed: any visit refreshes the clock, so only genuinely abandoned pages die and a shared link keeps working as long as anyone uses it. Tracking this costs almost nothing — the serving path already reads the page row, so the Worker updates `last_visited_at` only when the stored value is more than a day stale, via `waitUntil` so the response never waits on the write. Worst case is one UPDATE per page per day.
+Free-tier expiry is activity-based, not fixed: any visit refreshes the clock, so only genuinely abandoned pages die and a shared link keeps working as long as anyone uses it. A visit is any authorized read of the page content — a browser page view or an API `GET` of the HTML both count. Tracking this costs almost nothing — the serving path already reads the page row, so the Worker updates `last_visited_at` (day granularity) only when the stored value is more than a day stale, via `waitUntil` so the response never waits on the write. Worst case is one UPDATE per page per day. So that agents and scripts can see the clock, page JSON responses include a computed `expires_at` (`null` on plans without expiry).
 
-Expiry sweeps and quota enforcement share the scheduled-cleanup machinery planned for background deletion. The paid plan also carries MCP access when the MCP server exists. Exact anonymous-publishing semantics (what "private" means without an identity) are deliberately unresolved until that tier is built.
+Enforcement mechanics (decided 2026-07-19):
+
+- **Quota accounting** uses a usage counter table keyed by owner and UTC calendar day, incremented atomically with page creation. Deleting a page never refunds quota, which closes the create-and-delete loop. The window is the UTC day, not a rolling 24 hours — this is abuse control, not billing. An exhausted quota returns `429` with problem code `quota_exceeded`.
+- **Updates are not limited** for now. Each `PUT` retains a revision object, so unlimited updates are technically unbounded storage; this is an accepted risk to revisit if it shows up in practice rather than a designed-for case.
+- **Plan membership** is a `plan` column on the users table, defaulting to `free`. Launching a paid tier is a value change, not a migration.
+- **The expiry sweep and background deletion** run in a daily Cloudflare cron trigger (a `scheduled` handler in the same Worker). Each run selects free-tier pages unvisited for 3 months and deletes them in bounded batches through the standard two-phase deletion (mark in D1, then purge R2), which is idempotent: a crash leaves only marked-but-unpurged objects the next run sweeps. The DELETE endpoint's R2 purge moves onto the same machinery.
+
+The paid plan also carries MCP access when the MCP server exists.
+
+### Anonymous publishing (semantics decided 2026-07-19)
+
+The point of anonymous publishing is the core product loop with zero setup: an agent publishes a page and hands its operator a URL that opens in a browser immediately. That requirement fixes the design — the URL must be sufficient to view, because an anonymous visitor has no session to check and a browser cannot present a bearer token.
+
+- An unauthenticated `POST /v1/pages` succeeds by minting a **guest account**: the response carries the created page plus a guest bearer token (stored hashed). The token is the guest's only credential; there is no recovery if it is lost.
+- Viewing is **link-access, locked to the first browser**. The first browser to open the page receives a host-only, HTTP-only viewer cookie (a random viewer id) and the page binds to it; every later browser view requires that cookie. The same viewer cookie serves for all of a browser's guest pages — binding is a per-page row, not a per-page cookie. Guests cannot change sharing.
+- Any other browser — a second person the link leaked to, or the operator on another device or after clearing cookies — receives a lockout response instead of the page. The lockout is **deliberate friction and a conversion surface**: it explains that the page is locked to the browser that first opened it and invites the visitor to sign up. (Converting a guest's pages into a signed-in account is where a claim flow will eventually live; until then the pitch is to sign up and republish.)
+- The design assumes the direct handoff workflow: the agent gives the URL straight to its operator, who opens it. It does not defend the first-view race against link scanners or chat previews, because in this workflow the link never transits those systems.
+- The binding is irrevocable: there is no reset. A viewer who loses the cookie (new device, cleared cookies) has lost browser access to that page — sign up and republish, or read it through the API. Given the 1-week lifetime, permanence is acceptable and the dead end is itself the upsell.
+- The guest account owns its pages: API requests bearing the guest token manage them normally (update, pull, list, delete) and bypass the viewer lock entirely — the lock gates only the browser serving path.
+- Because minting a fresh guest account is free, the 5 pages/day quota is enforced per client IP — the same usage counter table, keyed by IP and UTC day.
+- The 1-week lifetime is fixed from publish (not activity-based) and rides the same daily cron sweep; guest accounts whose pages have all expired are swept with them.
+- There is no claim-into-account flow for now: keeping a page past the anonymous tier means republishing it while signed in.
 
 WorkOS AuthKit owns user authentication. Signup is instant and self-serve through AuthKit's hosted UI — Postpage itself has no signup route; AuthKit is the signup surface, and the CLI device-flow login doubles as signup for a brand-new user. Supported methods are Magic Auth (emailed one-time code) and GitHub OAuth; password authentication is disabled. Both methods yield a verified email, which `specific_users` sharing depends on.
 
@@ -457,7 +478,5 @@ The following should be decided during implementation without changing the produ
 - API response field names not explicitly fixed above.
 - Cursor encoding.
 - CLI packaging and local credential storage.
-- Enforcement mechanics for plan quotas and the expiry sweep.
 - Logging, metrics, alerts, and audit retention.
-- Background deletion mechanism.
 - Test and deployment environments.
