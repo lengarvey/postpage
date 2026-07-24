@@ -22,6 +22,8 @@ export interface PageResource {
   updated_at: string;
   /** When the page will be deleted if nothing changes; null = no expiry. */
   expires_at: string | null;
+  /** Guest bearer token, returned exactly once on an anonymous publish. */
+  guest_token?: string;
 }
 
 export interface ListResponse {
@@ -67,6 +69,21 @@ export class ApiClient {
     return auth?.kind === "workos" ? (auth.user ?? null) : null;
   }
 
+  /** Whether any auth material (env token or stored credentials) exists. */
+  hasAuth(): boolean {
+    return this.envToken !== undefined || this.credentials?.auth !== undefined;
+  }
+
+  /**
+   * Persist the guest bearer token an anonymous publish minted, so this CLI
+   * can manage the guest's pages from now on. The API returns the token
+   * exactly once; losing it means losing control of the page.
+   */
+  saveGuestToken(token: string): void {
+    this.credentials = { api_url: this.apiUrl, auth: { kind: "token", token } };
+    writeCredentials(this.credentials);
+  }
+
   private async bearerToken(): Promise<string> {
     if (this.envToken !== undefined) return this.envToken;
     const auth = this.credentials?.auth;
@@ -110,6 +127,9 @@ export class ApiClient {
       body?: Uint8Array | string;
       contentType?: string;
       accept?: string;
+      /** Send without Authorization when no auth material exists, instead of
+       * failing locally — the API then mints a guest account (POST /v1/pages). */
+      anonymous?: boolean;
     } = {},
   ): Promise<Response> {
     const url = new URL(`${this.apiUrl}${path}`);
@@ -118,9 +138,10 @@ export class ApiClient {
     }
 
     const send = async (): Promise<Response> => {
-      const headers: Record<string, string> = {
-        Authorization: `Bearer ${await this.bearerToken()}`,
-      };
+      const headers: Record<string, string> = {};
+      if (!(options.anonymous === true && !this.hasAuth())) {
+        headers["Authorization"] = `Bearer ${await this.bearerToken()}`;
+      }
       if (options.contentType !== undefined) {
         headers["Content-Type"] = options.contentType;
       }

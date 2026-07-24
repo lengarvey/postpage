@@ -3,6 +3,11 @@
 First-party command-line interface over the Postpage HTTP API.
 
 ```sh
+# Publish without logging in at all — the first publish mints a guest
+# account (5 pages/day; pages are deleted 1 week after publish) and the
+# CLI stores its token so it can keep managing the page
+echo '<h1>hi</h1>' | postpage publish
+
 # One-time: log in via the browser (WorkOS device flow) …
 postpage login
 
@@ -40,6 +45,14 @@ approval, and stores the tokens in `~/.config/postpage/credentials.json`
 tokens are refreshed automatically; when the refresh token expires you are
 asked to log in again. The production WorkOS client id is built in;
 override it with `--client-id` or `POSTPAGE_WORKOS_CLIENT_ID`.
+
+`postpage publish` needs no authentication at all: with no stored
+credentials it publishes anonymously, and the guest bearer token the API
+returns (exactly once) is stored as the CLI's credentials so later
+`update`/`sharing`/`delete` calls work on the page. The token itself is
+never printed; `--json` output marks the result with `"guest": true`.
+Logging in later replaces the guest credentials — keeping a page past the
+anonymous tier means republishing it while signed in.
 
 `postpage token` prints a currently valid access token (refreshing first
 when needed) for use outside the CLI, e.g.
