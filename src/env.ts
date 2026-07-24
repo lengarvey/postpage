@@ -29,4 +29,11 @@ export interface Env {
    * fetching WorkOS's remote JWKS. Never set in deployed environments.
    */
   WORKOS_JWKS?: string;
+  /**
+   * WorkOS AuthKit issuer origin (e.g. "https://auth.postpage.ai" or
+   * "https://<slug>.authkit.app"), advertised to MCP clients as the OAuth
+   * authorization server. Empty/unset disables the OAuth discovery routes;
+   * /mcp itself still accepts valid bearer tokens.
+   */
+  WORKOS_AUTHKIT_DOMAIN?: string;
 }

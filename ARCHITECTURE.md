@@ -314,6 +314,16 @@ If neither a file nor piped content is present, the CLI prints usage instead of 
 
 Commands support `--json` for reliable agent and script integration. Publishing defaults to private.
 
+## MCP server
+
+A remote MCP server (added 2026-07-24; see [MCP.md](MCP.md) for the full design) lets hosted assistants such as Claude and ChatGPT publish pages directly through their connector features.
+
+- **Transport**: stateless Streamable HTTP at `POST /mcp` on the API origin — one JSON response per request, no sessions or SSE.
+- **Authorization**: standard MCP OAuth. Postpage is only the protected resource; `/.well-known/oauth-protected-resource` points clients at WorkOS AuthKit, which handles Dynamic Client Registration and the consent flow. The resulting access tokens are the same AuthKit JWTs the API already verifies — there is no parallel credential system.
+- **Tools** are a thin adapter dispatching in-process to the pages API, so quotas, validation, and sharing semantics are shared: `publish_page`, `update_page`, `get_page`, `list_pages`, `set_page_sharing`, `delete_page`.
+
+MCP access was originally earmarked for the paid plan; until that plan exists the endpoint is open to every authenticated identity, and the future gate is a single plan check at the `/mcp` auth step.
+
 ## Storage
 
 ### R2
@@ -466,7 +476,6 @@ The product intentionally excludes:
 - Custom domains.
 - Analytics.
 - Email invitations.
-- An MCP server, for now. It is planned as a thin adapter over the HTTP API, bundled with the paid plan.
 
 ## Deferred implementation decisions
 

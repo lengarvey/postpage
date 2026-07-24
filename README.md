@@ -53,6 +53,16 @@ All endpoints require a bearer token. Errors are RFC 9457
 | `GET /v1/pages?collection=owned\|shared_with_me\|all` | List pages, newest-updated first, cursor-paginated. |
 | `GET pages.postpage.ai/{uuid}` | The page itself (browser serving path, not the API). |
 
+## MCP server
+
+The API is also exposed as a remote MCP server at
+`https://api.postpage.ai/mcp` (streamable HTTP), so hosted assistants like
+Claude and ChatGPT can publish pages through their connector features —
+"publish this report to Postpage" becomes a tool call. Authorization is
+standard MCP OAuth backed by WorkOS AuthKit; tools (`publish_page`,
+`update_page`, `get_page`, `list_pages`, `set_page_sharing`, `delete_page`)
+are a thin adapter over the HTTP API above. See [MCP.md](MCP.md).
+
 ## Stack
 
 A single Cloudflare Worker (Hono) is the only public route to content:
