@@ -135,8 +135,8 @@ with the login approval as the only human step. See the revised
       `pages.postpage.ai` in [wrangler.jsonc](wrangler.jsonc).
 - [x] Apply migrations to the production D1 (`wrangler d1 migrations apply`).
       (Migration 0004 — quotas/guests — still awaits a remote apply + deploy.)
-- [ ] CI: run `pnpm test` + `pnpm typecheck` on PRs; deploy on main.
-      (Deprioritized 2026-07-19 — not important right now.)
+- [x] CI: run `pnpm test` + `pnpm typecheck` on PRs; deploy on main.
+      (Done 2026-07-24: [.github/workflows/ci.yml](.github/workflows/ci.yml).)
 
 ## 5. Hardening & operations (deferred in MVP)
 
