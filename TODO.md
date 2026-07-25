@@ -32,8 +32,10 @@ dashboard for each environment):
 
 - [x] Register the redirect URI: `http://pages.localhost:8787/auth/callback`
       (local dev) and `https://pages.postpage.ai/auth/callback` (production).
-- [x] Create users (invite-only; no signup route). Password auth is enabled
-      in production; reset links can be minted via the password_reset API.
+- [x] Create users (invite-only; no signup route). Password auth is
+      currently enabled in production (reset links can be minted via the
+      password_reset API); it gets disabled when self-serve signup lands
+      (section 3), which is why ARCHITECTURE.md describes it as disabled.
 - [x] Production secrets: `wrangler secret put WORKOS_API_KEY`,
       `WORKOS_CLIENT_ID`, and `AUTH_SECRET` (any long random string; signs
       the OAuth `state`). Do **not** set `AUTH_MODE` in production.

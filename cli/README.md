@@ -49,7 +49,9 @@ override it with `--client-id` or `POSTPAGE_WORKOS_CLIENT_ID`.
 `postpage publish` needs no authentication at all: with no stored
 credentials it publishes anonymously, and the guest bearer token the API
 returns (exactly once) is stored as the CLI's credentials so later
-`update`/`sharing`/`delete` calls work on the page. The token itself is
+`update`/`pull`/`delete` calls work on the page (guests cannot change
+sharing; guest pages stay locked to the first browser that opens them).
+The token itself is
 never printed; `--json` output marks the result with `"guest": true`.
 Logging in later replaces the guest credentials — keeping a page past the
 anonymous tier means republishing it while signed in.

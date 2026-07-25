@@ -126,6 +126,9 @@ Publishing limits and page lifetime are the product's rate limiting; no separate
 | Free (signed in) | 30 | private, public | deleted after 3 months without a visit |
 | Paid *(future)* | 100 | private, public, specific_users | never expires |
 
+Until the paid tier ships, `specific_users` is not plan-gated in the
+implementation: any signed-in user can set it.
+
 Free-tier expiry is activity-based, not fixed: any visit refreshes the clock, so only genuinely abandoned pages die and a shared link keeps working as long as anyone uses it. A visit is any authorized read of the page content — a browser page view or an API `GET` of the HTML both count. Tracking this costs almost nothing — the serving path already reads the page row, so the Worker updates `last_visited_at` (day granularity) only when the stored value is more than a day stale, via `waitUntil` so the response never waits on the write. Worst case is one UPDATE per page per day. So that agents and scripts can see the clock, page JSON responses include a computed `expires_at` (`null` on plans without expiry).
 
 Enforcement mechanics (decided 2026-07-19):
