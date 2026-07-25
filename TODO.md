@@ -156,7 +156,31 @@ with the login approval as the only human step. See the revised
 - [x] CI: run `pnpm test` + `pnpm typecheck` on PRs; deploy on main.
       (Done 2026-07-24: [.github/workflows/ci.yml](.github/workflows/ci.yml).)
 
-## 5. Hardening & operations (deferred in MVP)
+## 5. MCP server (design in [MCP.md](MCP.md))
+
+Implemented 2026-07-24 in [src/routes/mcp.ts](src/routes/mcp.ts): stateless
+Streamable HTTP at `POST /mcp` on the API origin, OAuth protected-resource
+metadata pointing at WorkOS AuthKit, and six tools dispatching in-process to
+the pages API (tests in [test/mcp.test.ts](test/mcp.test.ts)).
+
+- [x] `/mcp` endpoint, OAuth discovery routes, tools, tests.
+- [x] **WorkOS production config** (done 2026-07-25 via the WorkOS API):
+      Dynamic Client Registration enabled;
+      `https://api.postpage.ai/mcp` registered as the OAuth protected
+      resource (`authkit_oauth_resource_01KYC8AJGA74DZX7HNQQ13HHC3`).
+- [x] **Config**: `WORKOS_AUTHKIT_DOMAIN` set to
+      `https://agile-charm-74.authkit.app` in `env.production.vars` (the
+      free WorkOS default domain — a custom `auth.postpage.ai` is a
+      US$99/month WorkOS add-on, deferred until the paid tier; switching
+      later changes the token issuer and forces connectors to re-auth).
+- [ ] **Manual — deploy**, then verify: `npx @modelcontextprotocol/inspector`
+      against `https://api.postpage.ai/mcp`, then add the connector in
+      Claude (Settings → Connectors) and ChatGPT (Apps & Connectors,
+      developer mode).
+- [ ] Gate MCP behind the paid plan when it launches (single check at the
+      `/mcp` auth step).
+
+## 6. Hardening & operations (deferred in MVP)
 
 - [x] **Background deletion** (done 2026-07-19 with the expiry work): DELETE
       marks in D1 (tombstone + `r2_purge_queue`) and purges R2 via
@@ -174,4 +198,4 @@ with the login approval as the only human step. See the revised
 
 Dashboard, injected scripts, search/discovery, multi-file pages, revision
 browsing/rollback APIs, renaming, custom domains, analytics, email
-invitations, MCP server (later, as a thin adapter over the API, paid plan).
+invitations.

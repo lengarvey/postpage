@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "./env";
 import { runExpirySweep } from "./lib/expiry";
 import { problems } from "./lib/problems";
+import { mcpApp } from "./routes/mcp";
 import { pagesApi } from "./routes/pages";
 import { serveApp } from "./routes/serve";
 import homepageHtml from "../design/homepage.html";
@@ -15,6 +16,8 @@ const apiApp = new Hono<{ Bindings: Env }>();
 apiApp.get("/", (c) => c.html(homepageHtml));
 apiApp.get("/healthz", (c) => c.json({ ok: true }));
 apiApp.route("/v1/pages", pagesApi);
+// MCP server (/mcp + OAuth resource metadata under /.well-known); see MCP.md.
+apiApp.route("/", mcpApp);
 apiApp.notFound((c) => problems.notFound(c));
 
 /**

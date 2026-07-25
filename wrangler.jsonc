@@ -31,7 +31,10 @@
   "vars": {
     // Host that serves pages at /{uuid} (and the /auth/* login routes).
     // Local dev overrides this via .dev.vars (pages.localhost).
-    "PAGES_DOMAIN": "pages.postpage.ai"
+    "PAGES_DOMAIN": "pages.postpage.ai",
+    // AuthKit issuer advertised to MCP clients (MCP.md). Empty disables the
+    // OAuth discovery routes; /mcp still accepts valid bearer tokens.
+    "WORKOS_AUTHKIT_DOMAIN": ""
   },
   // Daily expiry sweep (free-tier inactivity, guest TTL, deferred R2
   // purges). Locally: `wrangler dev --test-scheduled` + /__scheduled.
@@ -64,7 +67,12 @@
         }
       ],
       "vars": {
-        "PAGES_DOMAIN": "pages.postpage.ai"
+        "PAGES_DOMAIN": "pages.postpage.ai",
+        // Production AuthKit issuer (MCP.md): the WorkOS-assigned default
+        // domain. Deliberately not a custom domain — that's a paid WorkOS
+        // add-on, deferred until the paid tier ships. Changing this changes
+        // the token issuer: every MCP connector must re-authenticate.
+        "WORKOS_AUTHKIT_DOMAIN": "https://agile-charm-74.authkit.app"
       },
       "triggers": { "crons": ["0 3 * * *"] }
     }
