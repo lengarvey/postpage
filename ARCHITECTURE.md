@@ -322,7 +322,7 @@ A remote MCP server (added 2026-07-24; see [MCP.md](MCP.md) for the full design)
 - **Authorization**: standard MCP OAuth. Postpage is only the protected resource; `/.well-known/oauth-protected-resource` points clients at WorkOS AuthKit, which handles Dynamic Client Registration and the consent flow. The resulting access tokens are the same AuthKit JWTs the API already verifies — there is no parallel credential system.
 - **Tools** are a thin adapter dispatching in-process to the pages API, so quotas, validation, and sharing semantics are shared: `publish_page`, `update_page`, `get_page`, `list_pages`, `set_page_sharing`, `delete_page`.
 
-MCP access was originally earmarked for the paid plan; until that plan exists the endpoint is open to every authenticated identity, and the future gate is a single plan check at the `/mcp` auth step.
+MCP requires a **signed-in account**: guest tokens (minted by anonymous publishing) are rejected at the `/mcp` auth gate with the OAuth challenge, since accepting them would make the MCP server effectively anonymous. MCP access was originally earmarked for the paid plan; until that plan exists the endpoint is open to every signed-in identity, and the future gate is the same single check at the `/mcp` auth step.
 
 ## Storage
 

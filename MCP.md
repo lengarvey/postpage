@@ -78,11 +78,15 @@ the dominant chat-assistant flow. `specific_users` stays on
 
 ### Plan gating
 
-ARCHITECTURE.md bundles MCP access with the (future) paid plan. There is no
-paid plan yet, so the MCP endpoint is open to every authenticated identity
-for now. When paid launches, the gate is one check at the `/mcp` auth step
-(look up `users.plan` for the verified identity) — noted here so it isn't
-forgotten.
+MCP requires a signed-in account: guest tokens (minted by anonymous
+publishing) are rejected at the `/mcp` auth gate with the OAuth challenge,
+because accepting them would make the MCP server usable with zero signup.
+
+ARCHITECTURE.md additionally bundles MCP access with the (future) paid plan.
+There is no paid plan yet, so the MCP endpoint is open to every signed-in
+identity for now. When paid launches, the gate is one more check at the same
+`/mcp` auth step (look up `users.plan` for the verified identity) — noted
+here so it isn't forgotten.
 
 ## What we implement (code, this branch)
 

@@ -506,16 +506,13 @@ function protectedResourceMetadata(c: McpContext): Response {
   );
 }
 
-function unauthorized(c: McpContext): Response {
+function unauthorized(c: McpContext, message: string): Response {
   const origin = new URL(c.req.url).origin;
   return c.json(
     {
       jsonrpc: "2.0",
       id: null,
-      error: {
-        code: RPC_ERRORS.invalidRequest,
-        message: "A valid bearer token is required.",
-      },
+      error: { code: RPC_ERRORS.invalidRequest, message },
     },
     401,
     {
@@ -561,7 +558,20 @@ mcpApp.post("/mcp", async (c) => {
     c.env,
     c.req.header("Authorization"),
   );
-  if (identity === null) return unauthorized(c);
+  if (identity === null) {
+    return unauthorized(c, "A valid bearer token is required.");
+  }
+  // MCP is for signed-in accounts only. Guest tokens are minted by
+  // unauthenticated publishes, so accepting them here would make the MCP
+  // server effectively anonymous; the 401 challenge points clients at the
+  // AuthKit OAuth flow instead.
+  if (identity.guest === true) {
+    return unauthorized(
+      c,
+      "MCP requires a signed-in Postpage account; guest tokens cannot " +
+        "use the MCP server. Complete the OAuth flow to sign in.",
+    );
+  }
 
   let parsed: unknown;
   try {
@@ -587,7 +597,24 @@ mcpApp.post("/mcp", async (c) => {
     );
   }
 
-  const response = await handleRpcMessage(c, parsed as JsonRpcMessage);
+  // Tool handlers can throw on infrastructure failures (D1/R2); surface
+  // those as a JSON-RPC internal error rather than Hono's default text 500,
+  // which MCP clients cannot parse.
+  let response: Record<string, unknown> | null;
+  try {
+    response = await handleRpcMessage(c, parsed as JsonRpcMessage);
+  } catch {
+    const message = parsed as JsonRpcMessage;
+    const id =
+      typeof message.id === "string" || typeof message.id === "number"
+        ? message.id
+        : null;
+    return c.json(
+      rpcError(id, RPC_ERRORS.internal, "Internal server error."),
+      500,
+      CORS_HEADERS,
+    );
+  }
   if (response === null) return c.body(null, 202, CORS_HEADERS);
   return c.json(response, 200, CORS_HEADERS);
 });

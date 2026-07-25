@@ -88,6 +88,32 @@ describe("OAuth discovery", () => {
     );
   });
 
+  it("rejects guest tokens: MCP is for signed-in accounts only", async () => {
+    // Mint a guest token via an anonymous publish, exactly as a real
+    // no-signup caller would obtain one.
+    const created = await SELF.fetch(`${API}/v1/pages`, {
+      method: "POST",
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+      body: HTML,
+    });
+    expect(created.status).toBe(201);
+    const { guest_token } = (await created.json()) as { guest_token: string };
+    expect(guest_token).toBeTruthy();
+
+    // The guest token works against the plain API...
+    const list = await SELF.fetch(`${API}/v1/pages`, {
+      headers: { Authorization: `Bearer ${guest_token}` },
+    });
+    expect(list.status).toBe(200);
+
+    // ...but is challenged at the MCP endpoint.
+    const res = await rpc(guest_token, "tools/list");
+    expect(res.status).toBe(401);
+    expect(res.headers.get("WWW-Authenticate")).toContain("resource_metadata");
+    const body = (await res.json()) as RpcResponse;
+    expect(body.error?.message).toContain("signed-in");
+  });
+
   it("rejects invalid bearer tokens", async () => {
     const res = await SELF.fetch(`${API}/mcp`, {
       method: "POST",
