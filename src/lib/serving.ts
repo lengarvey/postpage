@@ -58,12 +58,14 @@ export function pageSecurityHeaders(
 /**
  * Read-through cache for immutable revision HTML. The cache key is uuid +
  * revision, so content updates naturally miss and sharing changes never
- * require a purge. Failures fall back to R2 silently.
+ * require a purge. Failures fall back to R2 silently. When a `waitUntil` is
+ * provided, cache population runs after the response instead of delaying it.
  */
 export async function getRevisionHtml(
   bucket: R2Bucket,
   uuid: string,
   revision: number,
+  waitUntil?: (promise: Promise<unknown>) => void,
 ): Promise<ArrayBuffer | null> {
   const cacheKey = new Request(
     `https://revision-cache.postpage.internal/${uuid}/${revision}`,
@@ -84,12 +86,18 @@ export async function getRevisionHtml(
   if (cache !== undefined) {
     try {
       // Constructing a Response from the buffer does not consume it.
-      await cache.put(
-        cacheKey,
-        new Response(bytes, {
-          headers: { "Cache-Control": "public, max-age=31536000, immutable" },
-        }),
-      );
+      const put = cache
+        .put(
+          cacheKey,
+          new Response(bytes, {
+            headers: { "Cache-Control": "public, max-age=31536000, immutable" },
+          }),
+        )
+        .catch(() => {
+          // Cache writes are best-effort.
+        });
+      if (waitUntil !== undefined) waitUntil(put);
+      else await put;
     } catch {
       // Cache writes are best-effort.
     }
@@ -101,7 +109,8 @@ export async function getRevisionHtml(
 export async function getCurrentHtml(
   bucket: R2Bucket,
   page: PageRow,
+  waitUntil?: (promise: Promise<unknown>) => void,
 ): Promise<ArrayBuffer | null> {
   if (page.current_revision === null) return null;
-  return getRevisionHtml(bucket, page.uuid, page.current_revision);
+  return getRevisionHtml(bucket, page.uuid, page.current_revision, waitUntil);
 }

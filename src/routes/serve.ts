@@ -112,6 +112,7 @@ serveApp.get("/:uuid", async (c) => {
       c.env.PAGES_BUCKET,
       page.uuid,
       page.current_revision,
+      (promise) => c.executionCtx.waitUntil(promise),
     );
     if (html === null) return c.notFound();
     // A page view is a visit for free-tier expiry (harmless no-op for the
