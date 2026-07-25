@@ -42,8 +42,18 @@ So Postpage is only the **protected resource**:
 - Claude/ChatGPT discover the metadata, register a client via DCR against
   AuthKit, run the browser consent flow with the user, and then call `/mcp`
   with a normal AuthKit access token.
-- Token verification reuses `identityFromRequest` unchanged — no parallel
-  auth system, and the dev stub / guest tokens keep working in tests.
+- Token verification reuses `identityFromRequest` — no parallel auth
+  system. WorkOS issues two token families, and verification routes on an
+  **issuer allowlist** (never the token's own say-so): `https://api.workos.com`
+  tokens (SDK / CLI device flow) verify against
+  `api.workos.com/sso/jwks/{clientId}`, and AuthKit-domain tokens (the MCP
+  OAuth flow) verify against `{WORKOS_AUTHKIT_DOMAIN}/oauth2/jwks`. Any
+  other issuer, or a missing one, is rejected.
+- **Audience binding (RFC 8707)**: AuthKit stamps OAuth-flow tokens with an
+  `aud` of the requested resource. The `/mcp` gate rejects any token whose
+  `aud` doesn't include this server's resource URL, so a token minted for a
+  different MCP server can't be replayed here. Tokens without an `aud`
+  (CLI/SDK family) pass — they're full-authority by design.
 
 CORS: permissive (`*`) on `/mcp` and the well-known routes. Auth is bearer
 tokens, never cookies, so this is safe, and it keeps browser-based MCP

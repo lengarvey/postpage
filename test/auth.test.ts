@@ -78,13 +78,18 @@ describe("requireAuth (WorkOS access tokens)", () => {
 
   function signToken(
     privateKey: CryptoKey,
-    { sub, expiresIn }: { sub?: string; expiresIn: string },
+    {
+      sub,
+      expiresIn,
+      issuer = "https://api.workos.com",
+    }: { sub?: string; expiresIn: string; issuer?: string | null },
   ) {
     let jwt = new SignJWT({})
       .setProtectedHeader({ alg: "RS256", kid: "test-key" })
       .setIssuedAt()
       .setExpirationTime(expiresIn);
     if (sub !== undefined) jwt = jwt.setSubject(sub);
+    if (issuer !== null) jwt = jwt.setIssuer(issuer);
     return jwt.sign(privateKey);
   }
 
@@ -154,6 +159,72 @@ describe("requireAuth (WorkOS access tokens)", () => {
       testEnv,
     );
     expect(res.status).toBe(401);
+  });
+
+  it("rejects tokens without an issuer", async () => {
+    const { testEnv, privateKey } = await workosTestEnv();
+    const token = await signToken(privateKey, {
+      sub: "user_01TEST",
+      expiresIn: "5m",
+      issuer: null,
+    });
+    const res = await app.request(
+      "/whoami",
+      { headers: { Authorization: `Bearer ${token}` } },
+      testEnv,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects tokens from a non-allowlisted issuer", async () => {
+    const { testEnv, privateKey } = await workosTestEnv();
+    const token = await signToken(privateKey, {
+      sub: "user_01TEST",
+      expiresIn: "5m",
+      issuer: "https://evil.example.com",
+    });
+    const res = await app.request(
+      "/whoami",
+      { headers: { Authorization: `Bearer ${token}` } },
+      testEnv,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts AuthKit-issued tokens when the domain is configured", async () => {
+    const { testEnv, privateKey } = await workosTestEnv();
+    const authkitEnv = {
+      ...testEnv,
+      WORKOS_AUTHKIT_DOMAIN: "https://auth.test.postpage.ai",
+    } as typeof testEnv;
+    await env.DB.prepare(
+      `INSERT INTO users (workos_user_id, email, email_verified, created_at, updated_at)
+       VALUES ('user_03TEST', 'kim@example.com', 1, '2026-01-01', '2026-01-01')`,
+    ).run();
+
+    const token = await signToken(privateKey, {
+      sub: "user_03TEST",
+      expiresIn: "5m",
+      issuer: "https://auth.test.postpage.ai",
+    });
+    const res = await app.request(
+      "/whoami",
+      { headers: { Authorization: `Bearer ${token}` } },
+      authkitEnv,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      userId: "user_03TEST",
+      email: "kim@example.com",
+    });
+
+    // The same token is rejected when no AuthKit domain is configured.
+    const withoutDomain = await app.request(
+      "/whoami",
+      { headers: { Authorization: `Bearer ${token}` } },
+      testEnv,
+    );
+    expect(withoutDomain.status).toBe(401);
   });
 
   it("rejects garbage tokens signed by nobody", async () => {

@@ -2,6 +2,7 @@ import type { WorkOS } from "@workos-inc/node";
 import {
   createLocalJWKSet,
   createRemoteJWKSet,
+  decodeJwt,
   jwtVerify,
   type JWTVerifyGetKey,
 } from "jose";
@@ -42,29 +43,46 @@ export async function workosClient(env: Env): Promise<WorkOS> {
   return cachedClient.client;
 }
 
-let cachedJwks: { key: string; jwks: JWTVerifyGetKey } | undefined;
+/** Issuer of tokens minted through the WorkOS API (SDKs, CLI device flow). */
+const WORKOS_API_ISSUER = "https://api.workos.com";
 
-function jwks(env: Env, clientId: string): JWTVerifyGetKey {
-  // Test-only local JWKS override; production always uses WorkOS's endpoint.
-  const cacheKey = env.WORKOS_JWKS ?? clientId;
-  if (cachedJwks?.key !== cacheKey) {
-    cachedJwks = {
-      key: cacheKey,
-      jwks: env.WORKOS_JWKS
-        ? createLocalJWKSet(JSON.parse(env.WORKOS_JWKS))
-        : createRemoteJWKSet(
-            new URL(`https://api.workos.com/sso/jwks/${clientId}`),
-          ),
-    };
+/** The configured AuthKit issuer origin, without a trailing slash. */
+export function authkitIssuer(env: Env): string | null {
+  if (!env.WORKOS_AUTHKIT_DOMAIN) return null;
+  return env.WORKOS_AUTHKIT_DOMAIN.replace(/\/+$/, "");
+}
+
+const jwksCache = new Map<string, JWTVerifyGetKey>();
+
+function jwksFromUrl(env: Env, url: string): JWTVerifyGetKey {
+  // Test-only local JWKS override; production always uses the live endpoint.
+  const cacheKey = env.WORKOS_JWKS ?? url;
+  let jwks = jwksCache.get(cacheKey);
+  if (jwks === undefined) {
+    jwks = env.WORKOS_JWKS
+      ? createLocalJWKSet(JSON.parse(env.WORKOS_JWKS))
+      : createRemoteJWKSet(new URL(url));
+    jwksCache.set(cacheKey, jwks);
   }
-  return cachedJwks.jwks;
+  return jwks;
 }
 
 /**
- * Verify a bearer credential as a WorkOS AuthKit access token (a JWT signed
- * by WorkOS) and resolve it to an Identity. Returns null for anything that
- * does not verify. This is the "credential form WorkOS supports": clients
+ * Verify a bearer credential as a WorkOS-issued access token and resolve it
+ * to an Identity. Returns null for anything that does not verify. Clients
  * obtain and refresh tokens through WorkOS; Postpage only verifies them.
+ *
+ * WorkOS issues two token families, distinguished by (allowlisted) issuer,
+ * each verified against its own JWKS — the allowlist decides which JWKS to
+ * trust, never the token itself:
+ *
+ *  - `https://api.workos.com[/...]`: SDK / CLI-device-flow tokens, signed by
+ *    the keys at api.workos.com/sso/jwks/{clientId}.
+ *  - The configured AuthKit domain: tokens minted by AuthKit acting as an
+ *    OAuth authorization server (the MCP connector flow), signed by the keys
+ *    at {authkit domain}/oauth2/jwks.
+ *
+ * Tokens with any other issuer — or none — are rejected outright.
  */
 export async function identityFromAccessToken(
   env: Env,
@@ -77,9 +95,34 @@ export async function identityFromAccessToken(
         "(or AUTH_MODE=dev-stub for local development)",
     );
   }
+
+  // Route on the *unverified* issuer claim, but only ever to an allowlisted
+  // (issuer, JWKS) pair; jwtVerify then re-checks the issuer on the verified
+  // payload. A forged issuer selects nothing.
+  let issuer: string;
+  let jwksUrl: string;
+  try {
+    const iss = decodeJwt(token).iss;
+    if (typeof iss !== "string") return null;
+    const authkit = authkitIssuer(env);
+    if (iss === WORKOS_API_ISSUER || iss.startsWith(`${WORKOS_API_ISSUER}/`)) {
+      issuer = iss;
+      jwksUrl = `${WORKOS_API_ISSUER}/sso/jwks/${config.clientId}`;
+    } else if (authkit !== null && iss === authkit) {
+      issuer = authkit;
+      jwksUrl = `${authkit}/oauth2/jwks`;
+    } else {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
   let sub: string | undefined;
   try {
-    const { payload } = await jwtVerify(token, jwks(env, config.clientId));
+    const { payload } = await jwtVerify(token, jwksFromUrl(env, jwksUrl), {
+      issuer,
+    });
     sub = payload.sub;
   } catch {
     return null;

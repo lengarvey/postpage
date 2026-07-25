@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { decodeJwt } from "jose";
 import type { Env } from "../env";
-import { identityFromRequest } from "../middleware/auth";
+import { bearerToken, identityFromRequest } from "../middleware/auth";
 import { pagesApi } from "./pages";
 
 /**
@@ -506,6 +507,27 @@ function protectedResourceMetadata(c: McpContext): Response {
   );
 }
 
+/**
+ * True unless the bearer token is a JWT that carries an `aud` claim which
+ * does not include this MCP server's resource URL. Identity verification
+ * (signature, issuer, expiry) has already happened by the time this runs.
+ */
+function tokenAudienceAllowed(c: McpContext): boolean {
+  const token = bearerToken(c.req.header("Authorization"));
+  if (token === null) return false;
+  let aud: unknown;
+  try {
+    aud = decodeJwt(token).aud;
+  } catch {
+    // Not a JWT (dev-stub / guest-format tokens); nothing to check.
+    return true;
+  }
+  if (aud === undefined) return true;
+  const resource = `${new URL(c.req.url).origin}/mcp`;
+  const audiences = Array.isArray(aud) ? aud : [aud];
+  return audiences.includes(resource);
+}
+
 function unauthorized(c: McpContext, message: string): Response {
   const origin = new URL(c.req.url).origin;
   return c.json(
@@ -570,6 +592,18 @@ mcpApp.post("/mcp", async (c) => {
       c,
       "MCP requires a signed-in Postpage account; guest tokens cannot " +
         "use the MCP server. Complete the OAuth flow to sign in.",
+    );
+  }
+  // Audience binding (RFC 8707): AuthKit stamps OAuth-flow tokens with an
+  // aud of the resource the client requested — the value our discovery
+  // metadata advertises. A token carrying an audience for some other
+  // resource must not be replayed here. Tokens without an aud (the CLI's
+  // api.workos.com family, dev-stub opaque tokens) already verified above
+  // and are full-authority by design, so they pass.
+  if (!tokenAudienceAllowed(c)) {
+    return unauthorized(
+      c,
+      "The bearer token's audience does not include this MCP server.",
     );
   }
 

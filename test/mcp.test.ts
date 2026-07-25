@@ -1,4 +1,5 @@
 import { SELF, env } from "cloudflare:test";
+import { SignJWT } from "jose";
 import { describe, expect, it } from "vitest";
 import { API, authed, createPage } from "./helpers";
 
@@ -112,6 +113,36 @@ describe("OAuth discovery", () => {
     expect(res.headers.get("WWW-Authenticate")).toContain("resource_metadata");
     const body = (await res.json()) as RpcResponse;
     expect(body.error?.message).toContain("signed-in");
+  });
+
+  // The dev-stub accepts any bearer string as an identity, so a JWT-shaped
+  // stub token exercises the audience gate without real WorkOS signing.
+  function stubJwt(aud?: string | string[]) {
+    let jwt = new SignJWT(aud === undefined ? {} : { aud })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject("user-aud-test")
+      .setExpirationTime("5m");
+    return jwt.sign(new TextEncoder().encode("dev-stub-not-verified"));
+  }
+
+  it("accepts tokens whose audience includes this MCP server", async () => {
+    const token = await stubJwt(`${API}/mcp`);
+    const res = await rpc(token, "ping");
+    expect(res.status).toBe(200);
+  });
+
+  it("accepts tokens without an audience claim", async () => {
+    const token = await stubJwt();
+    const res = await rpc(token, "ping");
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects tokens bound to a different resource", async () => {
+    const token = await stubJwt("https://some-other-server.example/mcp");
+    const res = await rpc(token, "ping");
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as RpcResponse;
+    expect(body.error?.message).toContain("audience");
   });
 
   it("rejects invalid bearer tokens", async () => {
