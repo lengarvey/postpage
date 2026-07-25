@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import { createMiddleware } from "hono/factory";
 import { decodeJwt } from "jose";
 import type { Env } from "../env";
 import { bearerToken, identityFromRequest } from "../middleware/auth";
@@ -546,6 +547,59 @@ function unauthorized(c: McpContext, message: string): Response {
 }
 
 export const mcpApp = new Hono<{ Bindings: Env }>();
+
+/**
+ * The MCP endpoint has one canonical origin: `api.{apex}` (the AuthKit OAuth
+ * resource is registered for that exact URL, and the advertised resource
+ * derives from the request origin). The API app also serves the apex, so a
+ * connector configured with `https://postpage.ai/mcp` would otherwise fail
+ * confusingly mid-OAuth with an unregistered-resource error.
+ *
+ * The apex `/mcp` endpoint cannot be a redirect: fetch strips Authorization
+ * on cross-origin redirects, so authenticated POSTs would land at the
+ * canonical host tokenless and every request would 401 — a permanent loop
+ * for a connector configured with the apex URL. Instead it fails fast with
+ * a 404 whose detail names the canonical URL. The unauthenticated discovery
+ * GETs do redirect (308), which plain OAuth tooling follows fine.
+ *
+ * The apex is derived from PAGES_DOMAIN ("pages.{apex}"), so this also
+ * holds in local dev (pages.localhost -> api.localhost) and stays inert if
+ * PAGES_DOMAIN ever stops following that shape.
+ */
+function canonicalMcpUrl(c: Context<{ Bindings: Env }>): string | null {
+  const apex = c.env.PAGES_DOMAIN.replace(/^pages\./, "");
+  const url = new URL(c.req.url);
+  if (apex === c.env.PAGES_DOMAIN || url.hostname !== apex) return null;
+  url.hostname = `api.${apex}`;
+  return url.toString();
+}
+
+mcpApp.use("/mcp", async (c, next) => {
+  const canonical = canonicalMcpUrl(c);
+  if (canonical !== null) {
+    return c.json(
+      {
+        type: "https://postpage.ai/problems/not-found",
+        title: "The MCP server is not served on this host",
+        status: 404,
+        code: "not_found",
+        detail: `Use the canonical MCP URL: ${canonical}`,
+      },
+      404,
+      { ...CORS_HEADERS, "Content-Type": "application/problem+json" },
+    );
+  }
+  await next();
+});
+const redirectToCanonical = createMiddleware<{ Bindings: Env }>(
+  async (c, next) => {
+    const canonical = canonicalMcpUrl(c);
+    if (canonical !== null) return c.redirect(canonical, 308);
+    await next();
+  },
+);
+mcpApp.use("/.well-known/oauth-protected-resource", redirectToCanonical);
+mcpApp.use("/.well-known/oauth-protected-resource/mcp", redirectToCanonical);
 
 mcpApp.get("/.well-known/oauth-protected-resource", protectedResourceMetadata);
 mcpApp.get(

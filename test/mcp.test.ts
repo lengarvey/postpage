@@ -158,6 +158,48 @@ describe("OAuth discovery", () => {
   });
 });
 
+describe("canonical MCP origin", () => {
+  // PAGES_DOMAIN is pages.postpage.ai in tests, so the apex is postpage.ai
+  // and the canonical MCP host is api.postpage.ai.
+  it("308-redirects apex discovery to the api host", async () => {
+    for (const path of [
+      "/.well-known/oauth-protected-resource",
+      "/.well-known/oauth-protected-resource/mcp",
+    ]) {
+      const res = await SELF.fetch(`http://postpage.ai${path}`, {
+        redirect: "manual",
+      });
+      expect(res.status).toBe(308);
+      expect(res.headers.get("Location")).toBe(
+        `http://api.postpage.ai${path}`,
+      );
+    }
+  });
+
+  it("fails fast on apex /mcp, naming the canonical URL", async () => {
+    // Not a redirect: fetch strips Authorization on cross-origin redirects,
+    // so a redirected connector would 401 forever. A 404 with the canonical
+    // URL in the detail makes the misconfiguration visible immediately.
+    const res = await SELF.fetch("http://postpage.ai/mcp", {
+      method: "POST",
+      ...authed("user-mcp", {
+        headers: { "Content-Type": "application/json" },
+      }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 99, method: "ping" }),
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.detail).toContain("http://api.postpage.ai/mcp");
+  });
+
+  it("does not redirect other apex routes", async () => {
+    const res = await SELF.fetch("http://postpage.ai/healthz", {
+      redirect: "manual",
+    });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("Streamable HTTP protocol", () => {
   it("handles initialize with version negotiation", async () => {
     const result = await rpcResult("user-mcp", "initialize", {
