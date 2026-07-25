@@ -4,7 +4,7 @@
 
 This document records the product and architecture decisions for Postpage. It describes the intended product rather than a complete implementation specification.
 
-Revised 2026-07-19, after the MVP shipped to production: per-page subdomains and the resolver URL are dropped in favour of flat URLs, signup is self-serve, and plans with quotas and expiry are defined. Where the deployed implementation still reflects the earlier design, [TODO.md](TODO.md) tracks the migration.
+Revised 2026-07-19, after the MVP shipped to production: per-page subdomains and the resolver URL are dropped in favour of flat URLs, signup is self-serve, and plans with quotas and expiry are defined. Where the deployed implementation still reflects the earlier design, the [issue tracker](https://github.com/lengarvey/postpage/issues) tracks the migration.
 
 ## Purpose
 

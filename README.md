@@ -172,8 +172,7 @@ callback sets one host-only session cookie on the `pages.postpage.ai`
 serving origin. Local development can keep using the dev bearer stub via
 `AUTH_MODE=dev-stub` in `.dev.vars`. The WorkOS environment configuration
 (dashboard redirect URIs, `wrangler secret put` for `WORKOS_API_KEY`,
-`WORKOS_CLIENT_ID`, `AUTH_SECRET`) is done; the steps are recorded in
-[TODO.md](TODO.md).
+`WORKOS_CLIENT_ID`, `AUTH_SECRET`) is done.
 
 Free-tier quotas, expiry, and anonymous publishing (ARCHITECTURE.md "Plans,
 quotas, and expiry") are implemented: creation is capped at 30 pages/UTC day
@@ -188,7 +187,8 @@ authorized content read refreshes the clock, and page JSON carries a
 computed `expires_at`. A daily cron trigger sweeps expired pages and runs
 the two-phase R2 purge that the DELETE endpoint also uses.
 
-Not yet built (details in [TODO.md](TODO.md)):
+Not yet built (tracked in the
+[issue tracker](https://github.com/lengarvey/postpage/issues)):
 
 - [ ] Self-serve signup configuration in the WorkOS dashboard (Magic Auth +
       GitHub OAuth, password auth disabled)
