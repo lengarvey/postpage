@@ -146,16 +146,19 @@ metadata pointing at WorkOS AuthKit, and six tools dispatching in-process to
 the pages API (tests in [test/mcp.test.ts](test/mcp.test.ts)).
 
 - [x] `/mcp` endpoint, OAuth discovery routes, tools, tests.
-- [ ] **Manual — WorkOS dashboard**: enable Dynamic Client Registration
-      (Applications → Configuration); required before Claude/ChatGPT can
-      register as OAuth clients.
-- [ ] **Manual — config**: set `WORKOS_AUTHKIT_DOMAIN` in
-      `wrangler.jsonc` `env.production.vars` to the AuthKit issuer
-      (`https://<slug>.authkit.app` or the custom auth domain), then deploy.
-- [ ] **Manual — verify**: `npx @modelcontextprotocol/inspector` against
-      `https://api.postpage.ai/mcp`, then add the connector in Claude
-      (Settings → Connectors) and ChatGPT (Apps & Connectors, developer
-      mode).
+- [x] **WorkOS production config** (done 2026-07-25 via the WorkOS API):
+      Dynamic Client Registration enabled;
+      `https://api.postpage.ai/mcp` registered as the OAuth protected
+      resource (`authkit_oauth_resource_01KYC8AJGA74DZX7HNQQ13HHC3`).
+- [x] **Config**: `WORKOS_AUTHKIT_DOMAIN` set to
+      `https://agile-charm-74.authkit.app` in `env.production.vars` (the
+      free WorkOS default domain — a custom `auth.postpage.ai` is a
+      US$99/month WorkOS add-on, deferred until the paid tier; switching
+      later changes the token issuer and forces connectors to re-auth).
+- [ ] **Manual — deploy**, then verify: `npx @modelcontextprotocol/inspector`
+      against `https://api.postpage.ai/mcp`, then add the connector in
+      Claude (Settings → Connectors) and ChatGPT (Apps & Connectors,
+      developer mode).
 - [ ] Gate MCP behind the paid plan when it launches (single check at the
       `/mcp` auth step).
 

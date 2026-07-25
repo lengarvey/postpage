@@ -114,13 +114,16 @@ here so it isn't forgotten.
 
 ## What you (Len) need to do manually
 
-1. **WorkOS dashboard — enable Dynamic Client Registration**
-   (Applications → Configuration). Without this, Claude/ChatGPT cannot
-   self-register and OAuth setup fails.
-2. **Find your AuthKit domain** (WorkOS dashboard → AuthKit; either the
-   `https://<slug>.authkit.app` default or a custom `auth.postpage.ai`
-   CNAME) and put it in `wrangler.jsonc` → `env.production.vars.WORKOS_AUTHKIT_DOMAIN`
-   (it is deliberately empty in the committed config).
+Steps 1–2 were completed 2026-07-25 through the WorkOS API: Dynamic Client
+Registration is enabled in the production environment,
+`https://api.postpage.ai/mcp` is registered as the OAuth protected resource,
+and `WORKOS_AUTHKIT_DOMAIN` is committed as
+`https://agile-charm-74.authkit.app` (the free WorkOS default; a custom
+`auth.postpage.ai` is a US$99/month add-on, deferred until the paid tier —
+switching later changes the token issuer and forces connectors to re-auth).
+
+1. ~~WorkOS dashboard — enable Dynamic Client Registration.~~ Done.
+2. ~~Find your AuthKit domain and set `WORKOS_AUTHKIT_DOMAIN`.~~ Done.
 3. **Deploy**: `pnpm deploy:prod` (after the usual migrations, though this
    feature needs no new migration).
 4. **Smoke-test** with the inspector:

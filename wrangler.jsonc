@@ -68,10 +68,11 @@
       ],
       "vars": {
         "PAGES_DOMAIN": "pages.postpage.ai",
-        // MANUAL STEP (MCP.md): set to the production AuthKit issuer, e.g.
-        // "https://auth.postpage.ai" or "https://<slug>.authkit.app", after
-        // enabling Dynamic Client Registration in the WorkOS dashboard.
-        "WORKOS_AUTHKIT_DOMAIN": ""
+        // Production AuthKit issuer (MCP.md): the WorkOS-assigned default
+        // domain. Deliberately not a custom domain — that's a paid WorkOS
+        // add-on, deferred until the paid tier ships. Changing this changes
+        // the token issuer: every MCP connector must re-authenticate.
+        "WORKOS_AUTHKIT_DOMAIN": "https://agile-charm-74.authkit.app"
       },
       "triggers": { "crons": ["0 3 * * *"] }
     }
