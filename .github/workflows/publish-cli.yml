@@ -2,6 +2,11 @@ name: Publish CLI
 
 # Publishes the `postpage` npm package, only when a push to main touches the
 # CLI and cli/package.json carries a version not yet on the registry.
+#
+# Auth is npm Trusted Publishing (OIDC): npmjs.com is configured to trust this
+# repository + workflow file, so there is no NPM_TOKEN secret. Requires the
+# `npm` GitHub environment (restrict it to the main branch in repo settings).
+# Once the repository is public, npm attaches provenance automatically.
 on:
   push:
     branches: [main]
@@ -13,16 +18,15 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
-# If the repository goes public, add `id-token: write` here, a matching
-# `repository` field in cli/package.json, and `--provenance` on npm publish —
-# provenance attestations are only supported for public source repos.
 permissions:
   contents: read
+  id-token: write # OIDC for npm Trusted Publishing
 
 jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
+    environment: npm
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -32,7 +36,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: https://registry.npmjs.org
+
+      # Node 22 bundles npm 10; OIDC trusted publishing needs npm >= 11.5.1.
+      - name: Update npm
+        run: npm install -g npm@latest && npm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -59,5 +66,3 @@ jobs:
         if: steps.version.outputs.publish == 'true'
         working-directory: cli
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
