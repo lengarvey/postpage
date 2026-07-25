@@ -13,6 +13,7 @@ on:
     paths:
       - "cli/**"
       - ".github/workflows/publish-cli.yml"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}
@@ -28,6 +29,20 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm
     steps:
+      # Trusted publishing needs the job's OIDC grant. If this fails, GitHub
+      # didn't issue one — check that the workflow-level `id-token: write`
+      # permission survived and the `npm` environment allows this branch. If
+      # it passes but publish still hits ENEEDAUTH, the mismatch is on
+      # npmjs.com: the package's trusted publisher must name this repo,
+      # workflow file `publish-cli.yml`, and environment `npm` exactly.
+      - name: Assert OIDC token availability
+        run: |
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::No OIDC token request URL in the job environment — id-token: write was not granted."
+            exit 1
+          fi
+          echo "OIDC grant present."
+
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
