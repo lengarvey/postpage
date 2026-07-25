@@ -81,6 +81,29 @@ h2{font-size:clamp(26px,3vw,34px);font-weight:700;letter-spacing:-.015em;margin-
 .feat h3::before{content:"▸";color:var(--amber);font-size:13px}
 .feat p{color:var(--muted);font-size:14.5px}
 
+/* install */
+.install-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.install-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:26px 26px 24px}
+.install-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
+.install-card .install-note{color:var(--muted);font-size:14px;margin-bottom:16px}
+.install-card pre{font-family:var(--mono);font-size:13px;line-height:1.75;color:var(--text);background:var(--ink);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto}
+.install-card pre .c{color:var(--muted)}
+.install-card a.pkg{display:inline-flex;align-items:center;gap:6px;margin-top:14px;font-family:var(--mono);font-size:13px;color:var(--amber);text-decoration:none}
+.install-card a.pkg:hover{text-decoration:underline}
+
+/* tiers */
+.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.tier{border:1px solid var(--line);border-radius:10px;padding:26px 24px;display:flex;flex-direction:column;gap:14px;position:relative}
+.tier.soon{opacity:.72}
+.tier .name{font-family:var(--mono);font-size:13px;color:var(--amber);letter-spacing:.04em;text-transform:uppercase}
+.tier .badge{position:absolute;top:22px;right:22px;font-family:var(--mono);font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:3px 9px;letter-spacing:.04em;text-transform:uppercase}
+.tier .headline{font-size:22px;font-weight:700}
+.tier .headline span{font-family:var(--mono);font-size:13px;font-weight:400;color:var(--muted)}
+.tier ul{list-style:none;display:flex;flex-direction:column;gap:9px;margin-top:2px}
+.tier li{font-size:14px;color:var(--text);display:flex;gap:8px}
+.tier li::before{content:"✓";color:var(--ok);font-family:var(--mono)}
+.tier.soon li::before{content:"–";color:var(--muted)}
+
 /* sharing */
 .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
 .mode{border:1px solid var(--line);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
@@ -104,7 +127,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
 
 @media (max-width:880px){
   .hero{grid-template-columns:1fr;gap:40px;padding-top:56px}
-  .steps,.modes{grid-template-columns:1fr}
+  .steps,.modes,.install-grid,.tiers{grid-template-columns:1fr}
   .feat-grid{grid-template-columns:1fr}
   .nots{columns:1}
   .nav-links a:not(.btn){display:none}
@@ -122,9 +145,11 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
   <a class="logo" href="#">postpage<span class="dot">.</span>ai</a>
   <div class="nav-links">
     <a href="#how">How it works</a>
+    <a href="#install">Install</a>
+    <a href="#tiers">Tiers</a>
     <a href="#isolation">Isolation</a>
     <a href="#sharing">Sharing</a>
-    <a class="btn btn-ghost" href="#cta">Request access</a>
+    <a class="btn btn-ghost" href="#install">Get started</a>
   </div>
 </nav>
 
@@ -132,12 +157,12 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
   <div>
     <p class="kicker">Static hosting for coding agents</p>
     <h1>Pipe HTML in.<br>Get a <em>URL</em> back.</h1>
-    <p class="lede">Postpage turns a single self-contained HTML document into an isolated, access-controlled web page. Built for agents that generate reports, docs, and analysis — and the people they work for.</p>
+    <p class="lede">Postpage turns a single self-contained HTML document into an isolated, access-controlled web page. Publish from the CLI, the API, or a Claude Code skill built for agents that generate reports, docs, and analysis — and the people they work for.</p>
     <div class="hero-ctas">
-      <a class="btn btn-amber" href="#cta">Request access</a>
-      <a class="btn btn-ghost" href="#how">See the CLI</a>
+      <a class="btn btn-amber" href="#install">Install the CLI</a>
+      <a class="btn btn-ghost" href="#how">See how it works</a>
     </div>
-    <p class="hero-note">$ npm i -g postpage &nbsp;·&nbsp; private by default &nbsp;·&nbsp; up to 10 MiB per page</p>
+    <p class="hero-note">$ npm i -g postpage &nbsp;·&nbsp; no signup to start &nbsp;·&nbsp; up to 10 MiB per page</p>
   </div>
 
   <div class="term" aria-label="Terminal demo">
@@ -167,6 +192,73 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
       <span class="cmd">$ postpage sharing &lt;uuid&gt; public</span>
       <h3>Share</h3>
       <p>Flip a page between private, public, or a list of specific emails. Permission changes take effect on the very next request.</p>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <p class="sec-label">Install</p>
+  <h2>One package. One skill.</h2>
+  <p class="sec-lede">The CLI is on npm; the agent skill teaches Claude Code (and similar agents) how to use it. Install whichever pieces you need.</p>
+  <div class="install-grid">
+    <div class="install-card">
+      <h3>CLI</h3>
+      <p class="install-note">Node ≥ 20. Publish your first page without signing in — an unauthenticated publish mints a temporary guest account for you.</p>
+      <pre><span class="c"># install</span>
+npm i -g postpage
+
+<span class="c"># publish straight away, no login required</span>
+echo '&lt;h1&gt;hi&lt;/h1&gt;' | postpage publish
+
+<span class="c"># or sign in first for the free tier's higher limits</span>
+postpage login</pre>
+      <a class="pkg" href="https://www.npmjs.com/package/postpage" target="_blank" rel="noopener">npmjs.com/package/postpage →</a>
+    </div>
+    <div class="install-card">
+      <h3>Claude Code skill</h3>
+      <p class="install-note">Bundled in the repo. Copy or symlink it into your skills directory and Claude Code will publish, update, and share pages on request.</p>
+      <pre><span class="c"># from a checkout of postpage</span>
+cp -r skills/postpage ~/.claude/skills/postpage
+
+<span class="c"># or symlink to track updates</span>
+ln -s "$PWD/skills/postpage" \
+  ~/.claude/skills/postpage</pre>
+    </div>
+  </div>
+</section>
+
+<section id="tiers">
+  <p class="sec-label">Tiers</p>
+  <h2>Start anonymous. Sign in when you need more.</h2>
+  <p class="sec-lede">Daily publishing limits and page lifetime are the only rate limits — no separate API quotas to track. Tiers also differ in which sharing modes they unlock.</p>
+  <div class="tiers">
+    <div class="tier">
+      <span class="name">Anonymous</span>
+      <p class="headline">5 <span>pages / day</span></p>
+      <ul>
+        <li>No signup — first publish mints a guest account</li>
+        <li>Link-access, locked to the first browser that opens it</li>
+        <li>Deleted 1 week after publish</li>
+      </ul>
+    </div>
+    <div class="tier">
+      <span class="name">Free — signed in</span>
+      <p class="headline">30 <span>pages / day</span></p>
+      <ul>
+        <li>Sign in via Magic Auth or GitHub — no password</li>
+        <li>Private or public sharing</li>
+        <li>Deleted after 3 months with no visits</li>
+      </ul>
+    </div>
+    <div class="tier soon">
+      <span class="badge">Coming soon</span>
+      <span class="name">Paid</span>
+      <p class="headline">100 <span>pages / day</span></p>
+      <ul>
+        <li>Private, public, or specific-people sharing</li>
+        <li>Pages never expire</li>
+        <li>MCP server access</li>
+      </ul>
     </div>
   </div>
 </section>
@@ -227,14 +319,14 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
 </section>
 
 <section class="cta" id="cta">
-  <h2>Invite-only while we harden the edges.</h2>
-  <p>Postpage is in a private release. Tell us what your agents are shipping.</p>
-  <a class="btn btn-amber" href="mailto:hello@postpage.ai">Request access</a>
+  <h2>Publish your first page in one command.</h2>
+  <p>No signup, no dashboard. <code style="font-family:var(--mono);font-size:15px">npm i -g postpage</code> and pipe in some HTML.</p>
+  <a class="btn btn-amber" href="https://www.npmjs.com/package/postpage" target="_blank" rel="noopener">View on npm</a>
 </section>
 
 <footer>
   <span>postpage.ai — publish once, isolate always</span>
-  <span>© 2026 Postpage</span>
+  <span><a href="https://www.npmjs.com/package/postpage" target="_blank" rel="noopener">npm</a> &nbsp;·&nbsp; © 2026 Postpage</span>
 </footer>
 </div>
 
