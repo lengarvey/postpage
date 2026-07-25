@@ -3,8 +3,9 @@ import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { decodeJwt } from "jose";
 import type { Env } from "../env";
+import { authkitIssuer } from "../lib/workos";
 import { bearerToken, identityFromRequest } from "../middleware/auth";
-import { pagesApi } from "./pages";
+import { EMAIL_PATTERN, pagesApi } from "./pages";
 
 /**
  * Remote MCP server: a stateless Streamable HTTP endpoint at /mcp, secured
@@ -314,6 +315,18 @@ async function executeTool(
     case "publish_page": {
       const html = requireArgString(args, "html");
       const sharingMode = argString(args, "sharing_mode");
+      if (
+        args.sharing_mode !== undefined &&
+        sharingMode !== "private" &&
+        sharingMode !== "public"
+      ) {
+        // Validated before the page is created so a bad value can never
+        // leave a half-applied result behind.
+        throw new InvalidToolArguments(
+          '"sharing_mode" must be "private" or "public". Use ' +
+            "set_page_sharing for specific_users.",
+        );
+      }
       const created = await callPagesApi(c, "POST", "/", {
         contentType: "text/html; charset=utf-8",
         body: html,
@@ -391,9 +404,38 @@ async function executeTool(
 
     case "set_page_sharing": {
       const uuid = requireArgString(args, "uuid");
-      const body: Record<string, unknown> = {
-        sharing_mode: requireArgString(args, "sharing_mode"),
-      };
+      const sharingMode = requireArgString(args, "sharing_mode");
+      // Enforce the tool's own schema so client mistakes surface as
+      // invalid-params, not downstream API failures. Email validity reuses
+      // the API's pattern so the two layers can never disagree.
+      if (
+        sharingMode !== "private" &&
+        sharingMode !== "public" &&
+        sharingMode !== "specific_users"
+      ) {
+        throw new InvalidToolArguments(
+          '"sharing_mode" must be one of: private, public, specific_users.',
+        );
+      }
+      if (sharingMode === "specific_users") {
+        if (
+          !Array.isArray(args.emails) ||
+          args.emails.length === 0 ||
+          !args.emails.every(
+            (e): e is string => typeof e === "string" && EMAIL_PATTERN.test(e),
+          )
+        ) {
+          throw new InvalidToolArguments(
+            '"emails" is required with sharing_mode "specific_users" and ' +
+              "must be a non-empty array of valid email addresses.",
+          );
+        }
+      } else if (args.emails !== undefined) {
+        throw new InvalidToolArguments(
+          '"emails" is only allowed with sharing_mode "specific_users".',
+        );
+      }
+      const body: Record<string, unknown> = { sharing_mode: sharingMode };
       if (args.emails !== undefined) body.emails = args.emails;
       const res = await callPagesApi(c, "PUT", `/${uuid}/sharing`, {
         contentType: "application/json",
@@ -421,13 +463,27 @@ async function handleRpcMessage(
   c: McpContext,
   message: JsonRpcMessage,
 ): Promise<Record<string, unknown> | null> {
-  // Notifications and responses (no id) are acknowledged without a body.
-  const hasId =
-    typeof message.id === "string" || typeof message.id === "number";
-  if (!hasId) return null;
+  // A notification is a request with no id *member* (JSON-RPC 2.0 §4.1);
+  // acknowledge it without a body. An explicit `"id": null` is not a
+  // notification — answer it with an error rather than silently dropping a
+  // message the client may be awaiting.
+  if (!("id" in message)) return null;
+  if (typeof message.id !== "string" && typeof message.id !== "number") {
+    return rpcError(
+      null,
+      RPC_ERRORS.invalidRequest,
+      "id must be a string or number.",
+    );
+  }
   const id = message.id as JsonRpcId;
 
-  if (message.jsonrpc !== "2.0" || typeof message.method !== "string") {
+  if (typeof message.method !== "string") {
+    // A client-to-server *response* (id + result/error, no method) is
+    // acknowledged and ignored: this server never issues requests.
+    if ("result" in message || "error" in message) return null;
+    return rpcError(id, RPC_ERRORS.invalidRequest, "Invalid JSON-RPC request.");
+  }
+  if (message.jsonrpc !== "2.0") {
     return rpcError(id, RPC_ERRORS.invalidRequest, "Invalid JSON-RPC request.");
   }
   const params =
@@ -490,8 +546,10 @@ async function handleRpcMessage(
  * authorization server. 404 until WORKOS_AUTHKIT_DOMAIN is configured.
  */
 function protectedResourceMetadata(c: McpContext): Response {
-  const authkitDomain = c.env.WORKOS_AUTHKIT_DOMAIN;
-  if (!authkitDomain) {
+  // Normalized (trimmed, no trailing slash) so the advertised issuer always
+  // matches the one token verification pins in lib/workos.ts.
+  const authkitDomain = authkitIssuer(c.env);
+  if (authkitDomain === null) {
     return c.json({ error: "OAuth discovery is not configured." }, 404, CORS_HEADERS);
   }
   const origin = new URL(c.req.url).origin;
