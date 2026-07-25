@@ -75,6 +75,7 @@ describe("OAuth discovery", () => {
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.resource).toBe(`${API}/mcp`);
+      // Normalized: the configured value carries a trailing slash.
       expect(body.authorization_servers).toEqual([
         "https://auth.test.postpage.ai",
       ]);
@@ -218,6 +219,31 @@ describe("Streamable HTTP protocol", () => {
       protocolVersion: "1999-01-01",
     });
     expect(result.protocolVersion).toBe("2025-06-18");
+  });
+
+  it("answers an explicit id:null with an invalid-request error", async () => {
+    const res = await SELF.fetch(`${API}/mcp`, {
+      method: "POST",
+      ...authed("user-mcp", {
+        headers: { "Content-Type": "application/json" },
+      }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: null, method: "ping" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as RpcResponse;
+    expect(body.error?.code).toBe(-32600);
+  });
+
+  it("acknowledges client-to-server responses without a body", async () => {
+    const res = await SELF.fetch(`${API}/mcp`, {
+      method: "POST",
+      ...authed("user-mcp", {
+        headers: { "Content-Type": "application/json" },
+      }),
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7, result: {} }),
+    });
+    expect(res.status).toBe(202);
+    expect(await res.text()).toBe("");
   });
 
   it("acknowledges notifications with 202 and no body", async () => {
@@ -381,6 +407,23 @@ describe("tools/call", () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain("Access denied");
+  });
+
+  it("rejects specific_users without emails as invalid-params", async () => {
+    const page = await createPage("user-mcp");
+    for (const args of [
+      { uuid: page.uuid, sharing_mode: "specific_users" },
+      { uuid: page.uuid, sharing_mode: "specific_users", emails: [] },
+      { uuid: page.uuid, sharing_mode: "public", emails: ["a@example.com"] },
+    ]) {
+      const res = await rpc("user-mcp", "tools/call", {
+        name: "set_page_sharing",
+        arguments: args,
+      });
+      const body = (await res.json()) as RpcResponse;
+      expect(body.error?.code).toBe(-32602);
+      expect(body.error?.message).toContain("emails");
+    }
   });
 
   it("rejects missing required arguments with invalid-params", async () => {

@@ -30,7 +30,9 @@ export default defineWorkersConfig(async () => {
               AUTH_SECRET: "test-auth-secret-not-for-production",
               WORKOS_API_KEY: "sk_test_fake",
               WORKOS_CLIENT_ID: "client_test_fake",
-              WORKOS_AUTHKIT_DOMAIN: "https://auth.test.postpage.ai",
+              // Deliberately unnormalized (trailing slash): tests assert the
+              // discovery metadata advertises the normalized issuer.
+              WORKOS_AUTHKIT_DOMAIN: "https://auth.test.postpage.ai/",
             },
           },
         },

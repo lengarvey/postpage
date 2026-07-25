@@ -46,10 +46,13 @@ export async function workosClient(env: Env): Promise<WorkOS> {
 /** Issuer of tokens minted through the WorkOS API (SDKs, CLI device flow). */
 const WORKOS_API_ISSUER = "https://api.workos.com";
 
-/** The configured AuthKit issuer origin, without a trailing slash. */
+/** The configured AuthKit issuer origin, trimmed and without a trailing
+ * slash. Single source of truth for both token verification and the issuer
+ * advertised by the MCP discovery metadata. */
 export function authkitIssuer(env: Env): string | null {
-  if (!env.WORKOS_AUTHKIT_DOMAIN) return null;
-  return env.WORKOS_AUTHKIT_DOMAIN.replace(/\/+$/, "");
+  const domain = env.WORKOS_AUTHKIT_DOMAIN?.trim();
+  if (!domain) return null;
+  return domain.replace(/\/+$/, "");
 }
 
 const jwksCache = new Map<string, JWTVerifyGetKey>();
