@@ -157,7 +157,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
   <div>
     <p class="kicker">Static hosting for coding agents</p>
     <h1>Pipe HTML in.<br>Get a <em>URL</em> back.</h1>
-    <p class="lede">Postpage turns a single self-contained HTML document into an isolated, access-controlled web page. Publish from the CLI, the API, or a Claude Code skill built for agents that generate reports, docs, and analysis — and the people they work for.</p>
+    <p class="lede">Postpage turns a single self-contained HTML document into an isolated, access-controlled web page. Publish from the CLI, the API, a remote MCP server, or a Claude Code skill — built for agents that generate reports, docs, and analysis, and the people they work for.</p>
     <div class="hero-ctas">
       <a class="btn btn-amber" href="#install">Install the CLI</a>
       <a class="btn btn-ghost" href="#how">See how it works</a>
@@ -181,7 +181,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
     <div class="step">
       <span class="cmd">$ postpage publish page.html</span>
       <h3>Publish</h3>
-      <p>Send raw HTML from a file or a pipe. You get back a stable URL built on a server-generated UUID. New pages are private.</p>
+      <p>Send raw HTML from a file or a pipe. You get back a stable URL built on a server-generated UUID. Signed-in pages start private; anonymous pages lock to the first browser that opens them.</p>
     </div>
     <div class="step">
       <span class="cmd">$ postpage update &lt;uuid&gt;</span>
@@ -199,7 +199,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
 <section id="install">
   <p class="sec-label">Install</p>
   <h2>One package. One skill.</h2>
-  <p class="sec-lede">The CLI is on npm; the agent skill teaches Claude Code (and similar agents) how to use it. Install whichever pieces you need.</p>
+  <p class="sec-lede">The CLI is on npm; the agent skill teaches Claude Code (and similar agents) how to use it. Hosted assistants like Claude and ChatGPT can skip the install and connect to the remote MCP server instead (signed-in accounts only).</p>
   <div class="install-grid">
     <div class="install-card">
       <h3>CLI</h3>
@@ -230,11 +230,11 @@ ln -s "$PWD/skills/postpage" \
 <section id="tiers">
   <p class="sec-label">Tiers</p>
   <h2>Start anonymous. Sign in when you need more.</h2>
-  <p class="sec-lede">Daily publishing limits and page lifetime are the only rate limits — no separate API quotas to track. Tiers also differ in which sharing modes they unlock.</p>
+  <p class="sec-lede">Daily publishing limits and page lifetime are the only rate limits — no separate API quotas to track. Until the paid tier ships, every signed-in account gets all sharing modes and MCP access.</p>
   <div class="tiers">
     <div class="tier">
       <span class="name">Anonymous</span>
-      <p class="headline">5 <span>pages / day</span></p>
+      <p class="headline">5 <span>pages / day, per IP</span></p>
       <ul>
         <li>No signup — first publish mints a guest account</li>
         <li>Link-access, locked to the first browser that opens it</li>
@@ -246,8 +246,9 @@ ln -s "$PWD/skills/postpage" \
       <p class="headline">30 <span>pages / day</span></p>
       <ul>
         <li>Sign in via Magic Auth or GitHub — no password</li>
-        <li>Private or public sharing</li>
-        <li>Deleted after 3 months with no visits</li>
+        <li>Private, public, and specific-people sharing</li>
+        <li>MCP server access</li>
+        <li>Deleted after 3 months with no visits — any visit resets the clock</li>
       </ul>
     </div>
     <div class="tier soon">
@@ -336,9 +337,9 @@ ln -s "$PWD/skills/postpage" \
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var lines = [
     {t:'cmd',  text:'generate-report | postpage publish'},
-    {t:'ok',   text:'✓ published (rev 00000001, 48.2 KiB)'},
+    {t:'ok',   text:'✓ published — private (rev 1, 48.2 KiB)'},
     {t:'url',  text:'https://pages.postpage.ai/9f2c1a7e-…'},
-    {t:'cmd',  text:'postpage sharing 9f2c1a7e public'},
+    {t:'cmd',  text:'postpage sharing 9f2c1a7e-… public'},
     {t:'ok',   text:'✓ sharing_mode: public — effective on next request'}
   ];
   function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
