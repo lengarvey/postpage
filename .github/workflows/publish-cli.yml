@@ -13,9 +13,11 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
+# If the repository goes public, add `id-token: write` here, a matching
+# `repository` field in cli/package.json, and `--provenance` on npm publish —
+# provenance attestations are only supported for public source repos.
 permissions:
   contents: read
-  id-token: write # npm provenance
 
 jobs:
   publish:
@@ -56,6 +58,6 @@ jobs:
       - name: Publish
         if: steps.version.outputs.publish == 'true'
         working-directory: cli
-        run: npm publish --provenance --access public
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
