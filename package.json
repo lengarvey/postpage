@@ -1,7 +1,9 @@
 {
-  "name": "postpage",
+  "name": "postpage-server",
   "version": "0.0.1",
   "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.0",
   "type": "module",
   "bin": {
     "postpage": "./cli/dist/main.js"

@@ -32,7 +32,9 @@ Global options:
   --api-url <url>                   API origin (default ${DEFAULT_API_URL},
                                     or POSTPAGE_API_URL / the stored login)
 
-Authentication: \`postpage login\` (WorkOS device flow), or POSTPAGE_TOKEN.`;
+Authentication: \`postpage login\` (WorkOS device flow), or POSTPAGE_TOKEN.
+\`publish\` also works with no login at all: it creates a guest account
+(5 pages/day; pages are deleted 1 week after publish) and stores its token.`;
 
 interface GlobalFlags {
   json: boolean;
@@ -103,12 +105,26 @@ async function cmdPublish(args: string[]): Promise<void> {
   const { positionals, flags } = parse(args, {}, 1);
   const body = readBody(resolveBodySource(positionals[0], process.stdin.isTTY));
   const client = new ApiClient(flags.apiUrl);
-  const page = await client.requestJson<PageResource>("POST", "/v1/pages", {
-    body,
-    contentType: HTML_UPLOAD_TYPE,
-  });
-  if (flags.json) printJson(page);
-  else printPage(page, "Published.");
+  const { guest_token: guestToken, ...page } =
+    await client.requestJson<PageResource>("POST", "/v1/pages", {
+      body,
+      contentType: HTML_UPLOAD_TYPE,
+      anonymous: true,
+    });
+  // The API returns the guest token exactly once; persist it so this CLI
+  // can keep managing the page. Never echo it to output.
+  if (guestToken !== undefined) client.saveGuestToken(guestToken);
+  if (flags.json) {
+    printJson(guestToken !== undefined ? { ...page, guest: true } : page);
+    return;
+  }
+  printPage(page, guestToken !== undefined ? "Published anonymously." : "Published.");
+  if (guestToken !== undefined) {
+    console.log(
+      "\nGuest credentials saved — this CLI can update, share, and delete the page.\n" +
+        "Anonymous pages are deleted 1 week after publish; run `postpage login` for higher limits.",
+    );
+  }
 }
 
 async function cmdUpdate(args: string[]): Promise<void> {

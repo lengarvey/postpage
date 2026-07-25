@@ -74,6 +74,22 @@ See [cli/README.md](cli/README.md).
 Remaining CLI follow-ups:
 
 - [x] Publish the package to npm (done 2026-07-19).
+- [ ] **Guest token revocation**: a guest token is a long-lived static
+      bearer with no server-side revoke — `postpage logout` only deletes the
+      local file; a leaked token stays valid until the guest account is
+      swept. Low stakes (5 pages, 1-week lifetime) but worth a
+      revocation endpoint eventually.
+- [ ] **Open-sourcing (decided 2026-07-25: whole repo, MIT)** — code and
+      npm workflow are ready (LICENSE, license/repository fields,
+      trusted-publishing workflow); remaining manual steps:
+      - Flip the repository to public on GitHub (history audited
+        2026-07-25: no secrets ever committed; `.dev.vars` was always
+        gitignored).
+      - On npmjs.com, configure the `postpage` package's trusted publisher:
+        repo `lengarvey/postpage`, workflow `publish-cli.yml`,
+        environment `npm`.
+      - Create the `npm` GitHub environment restricted to the `main`
+        branch (no required reviewers).
 
 ## 3. Self-serve launch (product direction decided 2026-07-19)
 
@@ -135,8 +151,8 @@ with the login approval as the only human step. See the revised
       `pages.postpage.ai` in [wrangler.jsonc](wrangler.jsonc).
 - [x] Apply migrations to the production D1 (`wrangler d1 migrations apply`).
       (Migration 0004 — quotas/guests — still awaits a remote apply + deploy.)
-- [ ] CI: run `pnpm test` + `pnpm typecheck` on PRs; deploy on main.
-      (Deprioritized 2026-07-19 — not important right now.)
+- [x] CI: run `pnpm test` + `pnpm typecheck` on PRs; deploy on main.
+      (Done 2026-07-24: [.github/workflows/ci.yml](.github/workflows/ci.yml).)
 
 ## 5. Hardening & operations (deferred in MVP)
 
