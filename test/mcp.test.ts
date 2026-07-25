@@ -414,6 +414,7 @@ describe("tools/call", () => {
     for (const args of [
       { uuid: page.uuid, sharing_mode: "specific_users" },
       { uuid: page.uuid, sharing_mode: "specific_users", emails: [] },
+      { uuid: page.uuid, sharing_mode: "specific_users", emails: ["not-an-email"] },
       { uuid: page.uuid, sharing_mode: "public", emails: ["a@example.com"] },
     ]) {
       const res = await rpc("user-mcp", "tools/call", {
@@ -424,6 +425,27 @@ describe("tools/call", () => {
       expect(body.error?.code).toBe(-32602);
       expect(body.error?.message).toContain("emails");
     }
+  });
+
+  it("rejects unsupported sharing_mode values as invalid-params", async () => {
+    const page = await createPage("user-mcp");
+    const badSharing = await rpc("user-mcp", "tools/call", {
+      name: "set_page_sharing",
+      arguments: { uuid: page.uuid, sharing_mode: "everyone" },
+    });
+    const sharingBody = (await badSharing.json()) as RpcResponse;
+    expect(sharingBody.error?.code).toBe(-32602);
+    expect(sharingBody.error?.message).toContain("sharing_mode");
+
+    // publish_page only supports private/public; rejected before any page
+    // is created, so a bad value cannot leave a half-applied result.
+    const badPublish = await rpc("user-mcp", "tools/call", {
+      name: "publish_page",
+      arguments: { html: HTML, sharing_mode: "specific_users" },
+    });
+    const publishBody = (await badPublish.json()) as RpcResponse;
+    expect(publishBody.error?.code).toBe(-32602);
+    expect(publishBody.error?.message).toContain("sharing_mode");
   });
 
   it("rejects missing required arguments with invalid-params", async () => {

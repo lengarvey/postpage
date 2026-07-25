@@ -5,7 +5,7 @@ import { decodeJwt } from "jose";
 import type { Env } from "../env";
 import { authkitIssuer } from "../lib/workos";
 import { bearerToken, identityFromRequest } from "../middleware/auth";
-import { pagesApi } from "./pages";
+import { EMAIL_PATTERN, pagesApi } from "./pages";
 
 /**
  * Remote MCP server: a stateless Streamable HTTP endpoint at /mcp, secured
@@ -315,6 +315,18 @@ async function executeTool(
     case "publish_page": {
       const html = requireArgString(args, "html");
       const sharingMode = argString(args, "sharing_mode");
+      if (
+        args.sharing_mode !== undefined &&
+        sharingMode !== "private" &&
+        sharingMode !== "public"
+      ) {
+        // Validated before the page is created so a bad value can never
+        // leave a half-applied result behind.
+        throw new InvalidToolArguments(
+          '"sharing_mode" must be "private" or "public". Use ' +
+            "set_page_sharing for specific_users.",
+        );
+      }
       const created = await callPagesApi(c, "POST", "/", {
         contentType: "text/html; charset=utf-8",
         body: html,
@@ -394,16 +406,28 @@ async function executeTool(
       const uuid = requireArgString(args, "uuid");
       const sharingMode = requireArgString(args, "sharing_mode");
       // Enforce the tool's own schema so client mistakes surface as
-      // invalid-params, not downstream API failures.
+      // invalid-params, not downstream API failures. Email validity reuses
+      // the API's pattern so the two layers can never disagree.
+      if (
+        sharingMode !== "private" &&
+        sharingMode !== "public" &&
+        sharingMode !== "specific_users"
+      ) {
+        throw new InvalidToolArguments(
+          '"sharing_mode" must be one of: private, public, specific_users.',
+        );
+      }
       if (sharingMode === "specific_users") {
         if (
           !Array.isArray(args.emails) ||
           args.emails.length === 0 ||
-          !args.emails.every((e) => typeof e === "string")
+          !args.emails.every(
+            (e): e is string => typeof e === "string" && EMAIL_PATTERN.test(e),
+          )
         ) {
           throw new InvalidToolArguments(
             '"emails" is required with sharing_mode "specific_users" and ' +
-              "must be a non-empty array of strings.",
+              "must be a non-empty array of valid email addresses.",
           );
         }
       } else if (args.emails !== undefined) {

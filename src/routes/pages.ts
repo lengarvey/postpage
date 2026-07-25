@@ -296,7 +296,8 @@ pagesApi.put("/:uuid", async (c) => {
   return updatedPageResponse(c, page.uuid);
 });
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Shared with the MCP tool layer so email validity has one definition. */
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 pagesApi.put("/:uuid/sharing", async (c) => {
   // Guest pages stay locked to the viewer flow; guests cannot change sharing.
