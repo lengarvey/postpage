@@ -121,7 +121,7 @@ async function cmdPublish(args: string[]): Promise<void> {
   printPage(page, guestToken !== undefined ? "Published anonymously." : "Published.");
   if (guestToken !== undefined) {
     console.log(
-      "\nGuest credentials saved — this CLI can update, share, and delete the page.\n" +
+      "\nGuest credentials saved — this CLI can update, pull, and delete the page.\n" +
         "Anonymous pages are deleted 1 week after publish; run `postpage login` for higher limits.",
     );
   }

@@ -1,12 +1,13 @@
 # Postpage
 
-Publish a self-contained HTML document as an isolated static web page — from
+Publish a self-contained HTML document as an isolated static web page, from
 an API call or a pipe.
 
 Postpage is built for coding agents and scripts that generate HTML artifacts
 (reports, analyses, documentation, dashboards) and need somewhere to put them.
-You `POST` raw HTML and get back a stable URL. No dashboard, no build step, no
-asset pipeline: one document, one page, served byte-for-byte unchanged.
+You `POST` raw HTML and get back a stable URL. There is no dashboard, build
+step, or asset pipeline: one document, one page, served byte-for-byte
+unchanged.
 
 ```sh
 generate-report | curl -s -X POST https://api.postpage.ai/v1/pages \
@@ -16,38 +17,42 @@ generate-report | curl -s -X POST https://api.postpage.ai/v1/pages \
 
 ## What makes it different
 
-- **Pages are hermetic.** A strict Content Security Policy allows fully
-  inline HTML/CSS/JS/SVG but blocks all external subresources and outbound
-  connections (`fetch`, websockets, beacons, form posts). Uploaded documents
-  render; they don't phone home. The CSP is also the isolation boundary
-  between pages, which share the `pages.postpage.ai` origin: one page's
-  JavaScript cannot fetch another page or exfiltrate anything it computes,
-  and the API lives on a separate origin the session cookie never reaches.
-- **Sharing is enforced at the edge, on every request.** A page is `private`
-  (owner only), `public` (anyone with the URL), or shared with
-  `specific_users` by email. Changing the mode takes effect on the next
-  request — the URL (`https://pages.postpage.ai/{uuid}`) never changes, and
-  nothing needs a cache purge.
-- **Updates are revisions.** Every `PUT` writes a new immutable revision;
-  bytes are stored unchanged and old revisions are retained while the page
-  exists. Deletion is immediate and irreversible, leaving only a tombstone so
-  the page URL is never reassigned.
-- **Not discoverable by default.** Pages are unlisted, `noindex`, and served
-  with `no-referrer`. Public means "anyone with the complete URL", nothing
-  more.
+Pages are hermetic. A strict Content Security Policy allows fully inline
+HTML/CSS/JS/SVG but blocks all external subresources and outbound connections
+(`fetch`, websockets, beacons, form posts). Uploaded documents render; they
+don't phone home. The CSP is also the isolation boundary between pages, which
+share the `pages.postpage.ai` origin: one page's JavaScript cannot fetch
+another page or exfiltrate anything it computes, and the API lives on a
+separate origin the session cookie never reaches.
+
+Sharing is enforced at the edge, on every request. A page is `private`
+(owner only), `public` (anyone with the URL), or shared with `specific_users`
+by email. Changing the mode takes effect on the next request. The URL
+(`https://pages.postpage.ai/{uuid}`) never changes, and nothing needs a cache
+purge.
+
+Updates are revisions. Every `PUT` writes a new immutable revision; bytes are
+stored unchanged and old revisions are retained while the page exists.
+Deletion is immediate and irreversible, leaving only a tombstone so the page
+URL is never reassigned.
+
+Pages are not discoverable by default: unlisted, `noindex`, and served with
+`no-referrer`. Public means "anyone with the complete URL", nothing more.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
 
 ## API at a glance
 
-All endpoints require a bearer token. Errors are RFC 9457
-`application/problem+json` with a stable `code`.
+Every `/v1/pages` endpoint takes a bearer token, with one exception: an
+unauthenticated `POST /v1/pages` publishes anonymously by minting a guest
+account (see [Status](#status)). Errors are RFC 9457 `application/problem+json` with a
+stable `code`.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /v1/pages` | Create a page from a raw HTML body (≤ 10 MiB). Defaults to private. |
+| `POST /v1/pages` | Create a page from a raw HTML body (≤ 10 MiB). Defaults to private; unauthenticated calls mint a guest account and return its token once. |
 | `GET /v1/pages/{uuid}` | Current HTML (`Accept: text/html`, the default) or metadata + HTML (`Accept: application/json`). |
-| `PUT /v1/pages/{uuid}` | Replace content — always creates a new revision. |
+| `PUT /v1/pages/{uuid}` | Replace content. Always creates a new revision. |
 | `PUT /v1/pages/{uuid}/sharing` | Replace the sharing configuration. |
 | `DELETE /v1/pages/{uuid}` | Delete the page and all revisions. Irreversible. |
 | `GET /v1/pages?collection=owned\|shared_with_me\|all` | List pages, newest-updated first, cursor-paginated. |
@@ -62,7 +67,7 @@ bytes without ever caching an authorization decision.
 
 ## Development
 
-Runs entirely locally via wrangler/workerd — no Cloudflare account needed.
+Runs entirely locally via wrangler/workerd, with no Cloudflare account needed.
 
 ```sh
 pnpm install
@@ -86,24 +91,26 @@ migrations/        D1 schema migrations
 src/index.ts       host-based dispatch: API origin / pages serving origin
 src/routes/        pages API (/v1/pages...), page serving + browser auth
 src/lib/           storage, negotiation, cursors, serving headers
-src/middleware/    dev auth stub (to be replaced by WorkOS AuthKit)
+src/middleware/    bearer auth: WorkOS access tokens, guest tokens, dev stub
 test/              integration + unit tests
 ```
 
-### Auth stub
+### Local auth and browsing pages
 
-WorkOS AuthKit is not integrated yet. The bearer token itself is the
-identity: `Authorization: Bearer user-1` is user `user-1`; an email-shaped
-token (`Bearer alex@example.com`) also acts as that verified email so
-`specific_users` sharing can be exercised. See `src/middleware/auth.ts`.
-
-### Browsing pages locally
+Production auth is WorkOS AuthKit (see [Status](#status)). For local
+development you can skip WorkOS entirely with the dev stub, where the bearer
+token itself is the identity: `Authorization: Bearer user-1` is user
+`user-1`, and an email-shaped token (`Bearer alex@example.com`) also acts as
+that verified email so `specific_users` sharing can be exercised. See
+`src/middleware/auth.ts`. The test suite always runs against the stub.
 
 Browsers resolve `*.localhost` to 127.0.0.1, so a `.dev.vars` file (wrangler's
-local-only env overrides, gitignored) makes hosted pages directly openable:
+local-only env overrides, gitignored) enables the stub and makes hosted pages
+directly openable:
 
 ```sh
 cat > .dev.vars <<'EOF'
+AUTH_MODE=dev-stub
 PAGES_DOMAIN=pages.localhost
 PAGES_URL_BASE=http://pages.localhost:8787
 EOF
@@ -115,6 +122,8 @@ browser (make the page public first, or configure WorkOS for local browser
 login).
 
 ### Trying it locally
+
+With the `.dev.vars` above in place:
 
 ```sh
 # create a page (defaults to private)
@@ -145,15 +154,16 @@ cp -r skills/postpage ~/.claude/skills/postpage
 ## Status
 
 The HTTP API, page serving, WorkOS AuthKit authentication, the `postpage`
-CLI (published to npm), and production deployment described above are
-implemented and tested (90 tests running against real D1/R2 bindings in
+CLI (published to npm), CI, and production deployment described above are
+implemented and tested (93 tests running against real D1/R2 bindings in
 workerd). API bearer credentials are WorkOS access tokens verified against
 WorkOS's JWKS; browsers reach protected pages through an AuthKit login whose
 callback sets one host-only session cookie on the `pages.postpage.ai`
 serving origin. Local development can keep using the dev bearer stub via
-`AUTH_MODE=dev-stub` in `.dev.vars`. WorkOS setup (dashboard redirect URI +
-`wrangler secret put` for `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`,
-`AUTH_SECRET`) is described in [TODO.md](TODO.md).
+`AUTH_MODE=dev-stub` in `.dev.vars`. The WorkOS environment configuration
+(dashboard redirect URIs, `wrangler secret put` for `WORKOS_API_KEY`,
+`WORKOS_CLIENT_ID`, `AUTH_SECRET`) is done; the steps are recorded in
+[TODO.md](TODO.md).
 
 Free-tier quotas, expiry, and anonymous publishing (ARCHITECTURE.md "Plans,
 quotas, and expiry") are implemented: creation is capped at 30 pages/UTC day
@@ -161,14 +171,18 @@ for signed-in users and 5/day per client IP for anonymous publishing
 (`429 quota_exceeded`; deletes never refund). An unauthenticated
 `POST /v1/pages` mints a guest account whose bearer token is returned once
 in the response (`guest_token`); guest pages are link-access locked to the
-first browser that opens them and live 1 week from publish. Free-tier pages
-expire after 3 months without a visit; any authorized content read refreshes
-the clock, and page JSON carries a computed `expires_at`. A daily cron
-trigger sweeps expired pages and runs the two-phase R2 purge that the DELETE
-endpoint also uses.
+first browser that opens them and live 1 week from publish. Guests can
+update, pull, and delete their pages through the API but cannot change
+sharing. Free-tier pages expire after 3 months without a visit; any
+authorized content read refreshes the clock, and page JSON carries a
+computed `expires_at`. A daily cron trigger sweeps expired pages and runs
+the two-phase R2 purge that the DELETE endpoint also uses.
 
 Not yet built (details in [TODO.md](TODO.md)):
 
 - [ ] Self-serve signup configuration in the WorkOS dashboard (Magic Auth +
       GitHub OAuth, password auth disabled)
-- [ ] Login quickstart, CI, logging/metrics (deferred)
+- [ ] The paid tier. Until it ships, `specific_users` sharing is not
+      plan-gated: any signed-in user can set it, even though ARCHITECTURE.md
+      reserves it for paid plans.
+- [ ] Login quickstart, logging/metrics (deferred)
