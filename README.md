@@ -43,9 +43,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
 
 ## API at a glance
 
-Every endpoint takes a bearer token, with one exception: an unauthenticated
-`POST /v1/pages` publishes anonymously by minting a guest account (see
-[Status](#status)). Errors are RFC 9457 `application/problem+json` with a
+Every `/v1/pages` endpoint takes a bearer token, with one exception: an
+unauthenticated `POST /v1/pages` publishes anonymously by minting a guest
+account (see [Status](#status)). Errors are RFC 9457 `application/problem+json` with a
 stable `code`.
 
 | Endpoint | Purpose |
