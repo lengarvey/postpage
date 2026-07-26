@@ -54,7 +54,7 @@ h1 em{font-style:normal;color:var(--amber)}
 .term-bar{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
 .term-bar span{width:11px;height:11px;border-radius:50%;background:#2c3542}
 .term-bar .t{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}
-.term-body{font-family:var(--mono);font-size:14px;line-height:1.85;padding:20px 22px;min-height:216px;white-space:pre-wrap;word-break:break-all}
+.term-body{font-family:var(--mono);font-size:14px;line-height:1.85;padding:20px 22px;min-height:274px;white-space:pre-wrap;word-break:break-all}
 .term-body .p{color:var(--muted)}
 .term-body .ok{color:var(--ok)}
 .term-body .url{color:var(--amber);text-decoration:underline;text-underline-offset:3px}
@@ -337,10 +337,14 @@ ln -s "$PWD/skills/postpage" \
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var lines = [
     {t:'cmd',  text:'generate-report | postpage publish'},
-    {t:'ok',   text:'✓ published (rev 1, private, 48.2 KiB)'},
-    {t:'url',  text:'https://pages.postpage.ai/9f2c1a7e-…'},
+    {t:'ok',   text:'Published.'},
+    {t:'url',  pre:'  url:       ', text:'https://pages.postpage.ai/9f2c1a7e-…'},
+    {t:'txt',  text:'  uuid:      9f2c1a7e-…'},
+    {t:'txt',  text:'  revision:  1'},
+    {t:'txt',  text:'  sharing:   private'},
     {t:'cmd',  text:'postpage sharing 9f2c1a7e-… public'},
-    {t:'ok',   text:'✓ sharing_mode: public'}
+    {t:'ok',   text:'Sharing updated.'},
+    {t:'txt',  text:'  sharing:   public'}
   ];
   function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
   function render(done, partial){
@@ -349,7 +353,8 @@ ln -s "$PWD/skills/postpage" \
       var L=lines[i];
       html += L.t==='cmd' ? '<span class="p">$ </span>'+esc(L.text)+'\n'
             : L.t==='ok'  ? '<span class="ok">'+esc(L.text)+'</span>\n'
-            : '<span class="url">'+esc(L.text)+'</span>\n';
+            : L.t==='url' ? esc(L.pre)+'<span class="url">'+esc(L.text)+'</span>\n'
+            : esc(L.text)+'\n';
     }
     if(partial!==undefined){
       var L=lines[done];
