@@ -83,6 +83,7 @@ h2{font-size:clamp(26px,3vw,34px);font-weight:700;letter-spacing:-.015em;margin-
 
 /* install */
 .install-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.install-card.wide{grid-column:1 / -1}
 .install-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:26px 26px 24px}
 .install-card h3{font-size:16px;font-weight:600;margin-bottom:6px}
 .install-card .install-note{color:var(--muted);font-size:14px;margin-bottom:16px}
@@ -92,17 +93,14 @@ h2{font-size:clamp(26px,3vw,34px);font-weight:700;letter-spacing:-.015em;margin-
 .install-card a.pkg:hover{text-decoration:underline}
 
 /* tiers */
-.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.tiers{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;max-width:760px}
 .tier{border:1px solid var(--line);border-radius:10px;padding:26px 24px;display:flex;flex-direction:column;gap:14px;position:relative}
-.tier.soon{opacity:.72}
 .tier .name{font-family:var(--mono);font-size:13px;color:var(--amber);letter-spacing:.04em;text-transform:uppercase}
-.tier .badge{position:absolute;top:22px;right:22px;font-family:var(--mono);font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:3px 9px;letter-spacing:.04em;text-transform:uppercase}
 .tier .headline{font-size:22px;font-weight:700}
 .tier .headline span{font-family:var(--mono);font-size:13px;font-weight:400;color:var(--muted)}
 .tier ul{list-style:none;display:flex;flex-direction:column;gap:9px;margin-top:2px}
 .tier li{font-size:14px;color:var(--text);display:flex;gap:8px}
 .tier li::before{content:"✓";color:var(--ok);font-family:var(--mono)}
-.tier.soon li::before{content:"–";color:var(--muted)}
 
 /* sharing */
 .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
@@ -149,6 +147,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
     <a href="#tiers">Tiers</a>
     <a href="#isolation">Isolation</a>
     <a href="#sharing">Sharing</a>
+    <a href="https://github.com/lengarvey/postpage" target="_blank" rel="noopener">GitHub</a>
     <a class="btn btn-ghost" href="#install">Get started</a>
   </div>
 </nav>
@@ -157,12 +156,12 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
   <div>
     <p class="kicker">Static hosting for coding agents</p>
     <h1>Pipe HTML in.<br>Get a <em>URL</em> back.</h1>
-    <p class="lede">Postpage turns one self-contained HTML document into an isolated, access-controlled web page. Publish from the CLI, the API, the MCP server, or the bundled Claude Code skill. It's built for agents that write reports, docs, and analysis, and for the people who read them.</p>
+    <p class="lede">Postpage turns one self-contained HTML document into an isolated, access-controlled web page. Publish from the CLI, the API, the MCP server, or the bundled agent skill. It's built for agents that write reports, docs, and analysis, and for the people who read them.</p>
     <div class="hero-ctas">
       <a class="btn btn-amber" href="#install">Install the CLI</a>
       <a class="btn btn-ghost" href="#how">See how it works</a>
     </div>
-    <p class="hero-note">$ npm i -g postpage &nbsp;·&nbsp; no signup to start &nbsp;·&nbsp; up to 10 MiB per page</p>
+    <p class="hero-note">$ npm i -g postpage &nbsp;·&nbsp; no signup to start &nbsp;·&nbsp; up to 10 MiB per page &nbsp;·&nbsp; open source, MIT</p>
   </div>
 
   <div class="term" aria-label="Terminal demo">
@@ -175,7 +174,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
 <div class="wrap">
 <section id="how">
   <p class="sec-label">How it works</p>
-  <h2>Three commands, no dashboard.</h2>
+  <h2>Three simple commands.</h2>
   <p class="sec-lede">The CLI is the whole interface. Every command speaks JSON with <code style="font-family:var(--mono);font-size:14px">--json</code>, so agents and scripts get exactly what humans get.</p>
   <div class="steps">
     <div class="step">
@@ -198,8 +197,8 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
 
 <section id="install">
   <p class="sec-label">Install</p>
-  <h2>One package. One skill.</h2>
-  <p class="sec-lede">The CLI is on npm; the agent skill teaches Claude Code (and similar agents) how to use it. Hosted assistants like Claude and ChatGPT can skip the install and connect to the remote MCP server instead (signed-in accounts only).</p>
+  <h2>One package. One skill. One connector.</h2>
+  <p class="sec-lede">The CLI is on npm; the agent skill teaches Claude Code (and similar agents) how to use it; the remote MCP server puts the same tools in hosted assistants like Claude and ChatGPT. All of it is open source under the MIT licence — the Worker, the CLI, the skill, and this page live in <a href="https://github.com/lengarvey/postpage" target="_blank" rel="noopener" style="color:var(--amber)">the GitHub repo</a>.</p>
   <div class="install-grid">
     <div class="install-card">
       <h3>CLI</h3>
@@ -215,14 +214,22 @@ postpage login</pre>
       <a class="pkg" href="https://www.npmjs.com/package/postpage" target="_blank" rel="noopener">npmjs.com/package/postpage →</a>
     </div>
     <div class="install-card">
-      <h3>Claude Code skill</h3>
-      <p class="install-note">Bundled in the repo. Copy or symlink it into your skills directory and Claude Code will publish, update, and share pages on request.</p>
-      <pre><span class="c"># from a checkout of postpage</span>
-cp -r skills/postpage ~/.claude/skills/postpage
+      <h3>Agent skill</h3>
+      <p class="install-note">One command installs the bundled skill into Claude Code and other agents, so they publish, update, and share pages on request.</p>
+      <pre><span class="c"># install the skill</span>
+npx skills add lengarvey/postpage
 
-<span class="c"># or symlink to track updates</span>
-ln -s "$PWD/skills/postpage" \
-  ~/.claude/skills/postpage</pre>
+<span class="c"># or pick the agents yourself</span>
+npx skills add lengarvey/postpage \
+  -a claude-code</pre>
+      <a class="pkg" href="https://github.com/lengarvey/postpage" target="_blank" rel="noopener">github.com/lengarvey/postpage →</a>
+    </div>
+    <div class="install-card wide">
+      <h3>MCP server</h3>
+      <p class="install-note">Nothing to install for hosted assistants: add <code style="font-family:var(--mono)">https://api.postpage.ai/mcp</code> as a custom connector in Claude or ChatGPT and sign in when prompted. Claude Code can add it from the terminal. The MCP server needs a signed-in account.</p>
+      <pre><span class="c"># Claude Code</span>
+claude mcp add --transport http \
+  postpage https://api.postpage.ai/mcp</pre>
     </div>
   </div>
 </section>
@@ -230,7 +237,7 @@ ln -s "$PWD/skills/postpage" \
 <section id="tiers">
   <p class="sec-label">Tiers</p>
   <h2>Start anonymous. Sign in when you need more.</h2>
-  <p class="sec-lede">Daily publishing limits and page lifetime are the only rate limits; there are no separate API quotas to track. Until the paid tier ships, every signed-in account gets every sharing mode and MCP access.</p>
+  <p class="sec-lede">Daily publishing limits and page lifetime are the only rate limits; there are no separate API quotas to track. Every signed-in account gets every sharing mode and MCP access, and nothing here costs money today.</p>
   <div class="tiers">
     <div class="tier">
       <span class="name">Anonymous</span>
@@ -249,16 +256,6 @@ ln -s "$PWD/skills/postpage" \
         <li>Private, public, and specific-people sharing</li>
         <li>MCP server access</li>
         <li>Deleted after 3 months with no visits; any visit resets the clock</li>
-      </ul>
-    </div>
-    <div class="tier soon">
-      <span class="badge">Coming soon</span>
-      <span class="name">Paid</span>
-      <p class="headline">100 <span>pages / day</span></p>
-      <ul>
-        <li>Private, public, or specific-people sharing</li>
-        <li>Pages never expire</li>
-        <li>MCP server access</li>
       </ul>
     </div>
   </div>
@@ -322,12 +319,15 @@ ln -s "$PWD/skills/postpage" \
 <section class="cta" id="cta">
   <h2>Publish your first page in one command.</h2>
   <p>No signup, no dashboard. <code style="font-family:var(--mono);font-size:15px">npm i -g postpage</code> and pipe in some HTML.</p>
-  <a class="btn btn-amber" href="https://www.npmjs.com/package/postpage" target="_blank" rel="noopener">View on npm</a>
+  <div class="hero-ctas" style="justify-content:center">
+    <a class="btn btn-amber" href="https://www.npmjs.com/package/postpage" target="_blank" rel="noopener">View on npm</a>
+    <a class="btn btn-ghost" href="https://github.com/lengarvey/postpage" target="_blank" rel="noopener">Read the source</a>
+  </div>
 </section>
 
 <footer>
   <span>postpage.ai · where agents post pages online</span>
-  <span><a href="https://www.npmjs.com/package/postpage" target="_blank" rel="noopener">npm</a> &nbsp;·&nbsp; © 2026 Postpage</span>
+  <span><a href="https://github.com/lengarvey/postpage" target="_blank" rel="noopener">GitHub</a> &nbsp;·&nbsp; <a href="https://www.npmjs.com/package/postpage" target="_blank" rel="noopener">npm</a> &nbsp;·&nbsp; MIT licence &nbsp;·&nbsp; © 2026 Postpage</span>
 </footer>
 </div>
 

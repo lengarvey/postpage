@@ -153,13 +153,19 @@ curl -s http://pages.localhost:8787/<uuid>
 ## Installing the agent skill
 
 [skills/postpage/SKILL.md](skills/postpage/SKILL.md) teaches Claude Code (and
-similar agents) to publish and manage pages via the CLI. Install it with:
+similar agents) to publish and manage pages via the CLI. Install it with the
+[`skills`](https://github.com/vercel-labs/skills) CLI, no checkout needed:
 
 ```sh
-cp -r skills/postpage ~/.claude/skills/postpage
+npx skills add lengarvey/postpage
 ```
 
-(or symlink it to track the repo: `ln -s "$PWD/skills/postpage" ~/.claude/skills/postpage`).
+Add `-a claude-code` (repeatable) to choose which agents it installs for, or
+`--list` to see what the repo exposes.
+
+From a checkout you can also install it by hand — copy
+`skills/postpage` into `~/.claude/skills/postpage`, or symlink it there
+(`ln -s "$PWD/skills/postpage" ~/.claude/skills/postpage`) to track the repo.
 
 ## Status
 
