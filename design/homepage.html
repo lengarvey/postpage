@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Postpage — pipe HTML, get a URL</title>
+<title>Postpage: pipe HTML, get a URL</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -54,7 +54,7 @@ h1 em{font-style:normal;color:var(--amber)}
 .term-bar{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
 .term-bar span{width:11px;height:11px;border-radius:50%;background:#2c3542}
 .term-bar .t{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted)}
-.term-body{font-family:var(--mono);font-size:14px;line-height:1.85;padding:20px 22px;min-height:216px;white-space:pre-wrap;word-break:break-all}
+.term-body{font-family:var(--mono);font-size:14px;line-height:1.85;padding:20px 22px;min-height:274px;white-space:pre-wrap;word-break:break-all}
 .term-body .p{color:var(--muted)}
 .term-body .ok{color:var(--ok)}
 .term-body .url{color:var(--amber);text-decoration:underline;text-underline-offset:3px}
@@ -157,7 +157,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
   <div>
     <p class="kicker">Static hosting for coding agents</p>
     <h1>Pipe HTML in.<br>Get a <em>URL</em> back.</h1>
-    <p class="lede">Postpage turns a single self-contained HTML document into an isolated, access-controlled web page. Publish from the CLI, the API, or a Claude Code skill built for agents that generate reports, docs, and analysis — and the people they work for.</p>
+    <p class="lede">Postpage turns one self-contained HTML document into an isolated, access-controlled web page. Publish from the CLI, the API, the MCP server, or the bundled Claude Code skill. It's built for agents that write reports, docs, and analysis, and for the people who read them.</p>
     <div class="hero-ctas">
       <a class="btn btn-amber" href="#install">Install the CLI</a>
       <a class="btn btn-ghost" href="#how">See how it works</a>
@@ -181,7 +181,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
     <div class="step">
       <span class="cmd">$ postpage publish page.html</span>
       <h3>Publish</h3>
-      <p>Send raw HTML from a file or a pipe. You get back a stable URL built on a server-generated UUID. New pages are private.</p>
+      <p>Send raw HTML from a file or a pipe. You get back a stable URL built on a server-generated UUID. Signed-in pages start private; anonymous pages lock to the first browser that opens them.</p>
     </div>
     <div class="step">
       <span class="cmd">$ postpage update &lt;uuid&gt;</span>
@@ -199,11 +199,11 @@ footer{border-top:1px solid var(--line);padding:28px 0;font-family:var(--mono);f
 <section id="install">
   <p class="sec-label">Install</p>
   <h2>One package. One skill.</h2>
-  <p class="sec-lede">The CLI is on npm; the agent skill teaches Claude Code (and similar agents) how to use it. Install whichever pieces you need.</p>
+  <p class="sec-lede">The CLI is on npm; the agent skill teaches Claude Code (and similar agents) how to use it. Hosted assistants like Claude and ChatGPT can skip the install and connect to the remote MCP server instead (signed-in accounts only).</p>
   <div class="install-grid">
     <div class="install-card">
       <h3>CLI</h3>
-      <p class="install-note">Node ≥ 20. Publish your first page without signing in — an unauthenticated publish mints a temporary guest account for you.</p>
+      <p class="install-note">Node ≥ 20. You can publish before you sign in: an unauthenticated publish mints a temporary guest account for you.</p>
       <pre><span class="c"># install</span>
 npm i -g postpage
 
@@ -230,24 +230,25 @@ ln -s "$PWD/skills/postpage" \
 <section id="tiers">
   <p class="sec-label">Tiers</p>
   <h2>Start anonymous. Sign in when you need more.</h2>
-  <p class="sec-lede">Daily publishing limits and page lifetime are the only rate limits — no separate API quotas to track. Tiers also differ in which sharing modes they unlock.</p>
+  <p class="sec-lede">Daily publishing limits and page lifetime are the only rate limits; there are no separate API quotas to track. Until the paid tier ships, every signed-in account gets every sharing mode and MCP access.</p>
   <div class="tiers">
     <div class="tier">
       <span class="name">Anonymous</span>
-      <p class="headline">5 <span>pages / day</span></p>
+      <p class="headline">5 <span>pages / day, per IP</span></p>
       <ul>
-        <li>No signup — first publish mints a guest account</li>
+        <li>Your first publish mints a guest account, so there's nothing to sign up for</li>
         <li>Link-access, locked to the first browser that opens it</li>
         <li>Deleted 1 week after publish</li>
       </ul>
     </div>
     <div class="tier">
-      <span class="name">Free — signed in</span>
+      <span class="name">Free (signed in)</span>
       <p class="headline">30 <span>pages / day</span></p>
       <ul>
-        <li>Sign in via Magic Auth or GitHub — no password</li>
-        <li>Private or public sharing</li>
-        <li>Deleted after 3 months with no visits</li>
+        <li>Sign in via Magic Auth or GitHub (no passwords)</li>
+        <li>Private, public, and specific-people sharing</li>
+        <li>MCP server access</li>
+        <li>Deleted after 3 months with no visits; any visit resets the clock</li>
       </ul>
     </div>
     <div class="tier soon">
@@ -268,7 +269,7 @@ ln -s "$PWD/skills/postpage" \
   <h2>Every page is sealed off.</h2>
   <p class="sec-lede">Uploaded HTML is untrusted and may run arbitrary inline JavaScript. Postpage treats that as the default case, not the edge case.</p>
   <div class="feat-grid">
-    <div class="feat"><h3>Pages can't read each other</h3><p>The Content Security Policy blocks all outbound requests, so one page's JavaScript can never fetch another page or exfiltrate anything it computes — even for a visitor authorized to see both.</p></div>
+    <div class="feat"><h3>Pages can't read each other</h3><p>The Content Security Policy blocks all outbound requests, so one page's JavaScript can never fetch another page or exfiltrate anything it computes, even for a visitor authorized to see both.</p></div>
     <div class="feat"><h3>Bytes served unchanged</h3><p>No injected scripts, no rewriting, no "powered by" banner. What you upload is exactly what visitors receive, byte for byte.</p></div>
     <div class="feat"><h3>Network-sealed by CSP</h3><p>Inline script, style, and data: assets run freely. External fetches, sockets, beacons, and form posts are blocked at the browser.</p></div>
     <div class="feat"><h3>Auth enforced at the edge</h3><p>Every request passes through the Worker. HTML bytes are cached; authorization decisions never are. The storage bucket is private.</p></div>
@@ -325,7 +326,7 @@ ln -s "$PWD/skills/postpage" \
 </section>
 
 <footer>
-  <span>postpage.ai — publish once, isolate always</span>
+  <span>postpage.ai · where agents post pages online</span>
   <span><a href="https://www.npmjs.com/package/postpage" target="_blank" rel="noopener">npm</a> &nbsp;·&nbsp; © 2026 Postpage</span>
 </footer>
 </div>
@@ -336,10 +337,14 @@ ln -s "$PWD/skills/postpage" \
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var lines = [
     {t:'cmd',  text:'generate-report | postpage publish'},
-    {t:'ok',   text:'✓ published (rev 00000001, 48.2 KiB)'},
-    {t:'url',  text:'https://pages.postpage.ai/9f2c1a7e-…'},
-    {t:'cmd',  text:'postpage sharing 9f2c1a7e public'},
-    {t:'ok',   text:'✓ sharing_mode: public — effective on next request'}
+    {t:'ok',   text:'Published.'},
+    {t:'url',  pre:'  url:       ', text:'https://pages.postpage.ai/9f2c1a7e-…'},
+    {t:'txt',  text:'  uuid:      9f2c1a7e-…'},
+    {t:'txt',  text:'  revision:  1'},
+    {t:'txt',  text:'  sharing:   private'},
+    {t:'cmd',  text:'postpage sharing 9f2c1a7e-… public'},
+    {t:'ok',   text:'Sharing updated.'},
+    {t:'txt',  text:'  sharing:   public'}
   ];
   function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;')}
   function render(done, partial){
@@ -348,7 +353,8 @@ ln -s "$PWD/skills/postpage" \
       var L=lines[i];
       html += L.t==='cmd' ? '<span class="p">$ </span>'+esc(L.text)+'\n'
             : L.t==='ok'  ? '<span class="ok">'+esc(L.text)+'</span>\n'
-            : '<span class="url">'+esc(L.text)+'</span>\n';
+            : L.t==='url' ? esc(L.pre)+'<span class="url">'+esc(L.text)+'</span>\n'
+            : esc(L.text)+'\n';
     }
     if(partial!==undefined){
       var L=lines[done];
