@@ -36,6 +36,11 @@ Authentication: \`postpage login\` (WorkOS device flow), or POSTPAGE_TOKEN.
 \`publish\` also works with no login at all: it creates a guest account
 (5 pages/day; pages are deleted 1 week after publish) and stores its token.`;
 
+const QUICKSTART = `Quickstart:
+  postpage publish page.html        Publish a page (private to you by default)
+  postpage sharing <uuid> public    Share it with anyone who has the link
+  postpage list                     See your pages`;
+
 interface GlobalFlags {
   json: boolean;
   apiUrl: string | undefined;
@@ -335,7 +340,7 @@ and confirm the code ${authorization.user_code}. Waiting for approval…`);
     printJson({ api_url: apiUrl, auth: "workos", user: tokens.user ?? null });
   } else {
     const who = tokens.user !== undefined ? ` as ${tokens.user.email}` : "";
-    console.log(`Logged in${who}. Credentials stored for ${apiUrl}.`);
+    console.log(`Logged in${who}. Credentials stored for ${apiUrl}.\n\n${QUICKSTART}`);
   }
 }
 

@@ -398,7 +398,9 @@ pagesApi.get("/:uuid", async (c) => {
     return problems.forbidden(c);
   }
 
-  const html = await getCurrentHtml(c.env.PAGES_BUCKET, page);
+  const html = await getCurrentHtml(c.env.PAGES_BUCKET, page, (promise) =>
+    c.executionCtx.waitUntil(promise),
+  );
   if (html === null) return problems.pageNotFound(c);
 
   // An API read of the content counts as a visit for free-tier expiry.
